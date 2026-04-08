@@ -1,6 +1,29 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+usage() {
+  cat <<'EOH'
+Usage:
+  gen-news [source_docx]
+
+Generate news outputs in the current folder using:
+  - body.txt
+  - meta.txt
+  - source docx (argument, or the only .docx in current directory)
+
+Outputs:
+  ./<base_stem>/<base_stem>_final.docx
+  ./<base_stem>/<base_stem>_標題職銜_final.docx
+
+Also moves .mp3 files from current folder into ./<base_stem>/.
+EOH
+}
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  usage
+  exit 0
+fi
+
 WORD_DIR="/home/weiying/python/word"
 PY="$WORD_DIR/.venv/bin/python"
 NEWS_PY="$WORD_DIR/generate_news.py"
@@ -16,7 +39,7 @@ if [[ -z "$source_docx" ]]; then
   mapfile -t docx_files < <(find . -maxdepth 1 -type f -name '*.docx' | sort)
   if [[ "${#docx_files[@]}" -ne 1 ]]; then
     echo "[error] expected exactly one .docx in current folder, found ${#docx_files[@]}" >&2
-    echo "[info] pass source docx explicitly: gall /path/to/source.docx" >&2
+    echo "[info] pass source docx explicitly: gen-news /path/to/source.docx" >&2
     exit 1
   fi
   source_docx="${docx_files[0]}"
@@ -65,9 +88,20 @@ meta_out="${target_dir}/${base_stem}_標題職銜_final.docx"
 
 # Move MP3 assets from current folder into the story output folder.
 shopt -s nullglob
+moved_count=0
+moved_names=()
 for mp3 in ./*.mp3 ./*.mp3:Zone.Identifier; do
   mv -f "$mp3" "$target_dir/"
+  moved_count=$((moved_count + 1))
+  moved_names+=("$(basename "$mp3")")
 done
 
 echo "[created] $(basename "$news_out")"
 echo "[created] $(basename "$meta_out")"
+if (( moved_count == 0 )); then
+  echo "[moved] 0 files"
+else
+  for name in "${moved_names[@]}"; do
+    echo "[moved] $name"
+  done
+fi

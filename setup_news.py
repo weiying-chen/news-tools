@@ -217,7 +217,7 @@ def run(args: argparse.Namespace) -> int:
                 file=sys.stderr,
             )
             print(
-                "[info] pass input explicitly: setup_news /path/to/file.docx",
+                "[info] pass input explicitly: setup-news /path/to/file.docx",
                 file=sys.stderr,
             )
             return 1
