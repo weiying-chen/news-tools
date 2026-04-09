@@ -27,10 +27,66 @@ EN_NAME_VALUE_RE = re.compile(
     r"[A-Za-zÀ-ÖØ-öø-ÿĀ-žḀ-ỹ][A-Za-zÀ-ÖØ-öø-ÿĀ-žḀ-ỹ.\s\"'“”‘’\-]*[A-Za-zÀ-ÖØ-öø-ÿĀ-žḀ-ỹ.]"
 )
 SOUND_BITE_PREFIX_RE = re.compile(r"^\s*SB\s*[:：\-]?\s*")
+EN_PHRASE_RE = re.compile(
+    r"[A-Za-zÀ-ÖØ-öø-ÿĀ-žḀ-ỹ][A-Za-zÀ-ÖØ-öø-ÿĀ-žḀ-ỹ.'\-]*"
+    r"(?:\s+[A-Za-zÀ-ÖØ-öø-ÿĀ-žḀ-ỹ][A-Za-zÀ-ÖØ-öø-ÿĀ-žḀ-ỹ.'\-]*)*"
+)
+NAME_TITLE_RE = re.compile(r"^(?:Mr|Ms|Mrs|Miss|Dr|Prof)\.?\b", re.IGNORECASE)
+ORG_HINT_RE = re.compile(
+    r"\b(?:School|University|College|Institute|Campus|Hospital|Foundation)\b",
+    re.IGNORECASE,
+)
 
 
 def strip_sound_bite_prefix(text: str) -> str:
     return SOUND_BITE_PREFIX_RE.sub("", text, count=1)
+
+
+def pick_best_english_phrase(text: str) -> str:
+    phrases = [p.strip().rstrip(" .,;:-") for p in EN_PHRASE_RE.findall(text)]
+    phrases = [p for p in phrases if p]
+    if not phrases:
+        return ""
+
+    def score(phrase: str) -> tuple[int, int]:
+        words = len(phrase.split())
+        rank = 0
+        if NAME_TITLE_RE.match(phrase):
+            rank += 3
+        if words >= 2:
+            rank += 2
+        if ORG_HINT_RE.search(phrase):
+            rank -= 2
+        return (rank, words)
+
+    return max(phrases, key=score)
+
+
+def extract_name_from_cue_segment(text: str) -> str:
+    cue = strip_sound_bite_prefix(text).strip()
+    if not cue:
+        return ""
+
+    # Heuristic 1: if cue has double spaces, tail often carries the person's name.
+    if re.search(r"\s{2,}", cue):
+        tail = re.split(r"\s{2,}", cue)[-1].strip()
+        if tail:
+            best_tail = pick_best_english_phrase(tail)
+            if looks_like_english_name(best_tail):
+                return best_tail
+
+    # Heuristic 2: if Chinese role text appears, name is often after it.
+    if re.search(r"[\u4e00-\u9fff]", cue):
+        tail_after_cjk = re.split(r"[\u4e00-\u9fff]+", cue)[-1].strip()
+        if tail_after_cjk:
+            best_tail = pick_best_english_phrase(tail_after_cjk)
+            if looks_like_english_name(best_tail):
+                return best_tail
+
+    best = pick_best_english_phrase(cue)
+    if looks_like_english_name(best):
+        return best
+    return ""
 
 
 def extract_docx_paragraphs(docx_path: Path) -> list[str]:
@@ -78,21 +134,10 @@ def extract_english_name_hint(text: str) -> str:
     if stripped[0] not in {"(", "（"} or stripped[-1] not in {")", "）"}:
         return ""
 
-    inner = strip_sound_bite_prefix(stripped[1:-1].strip())
-    match = EN_NAME_HINT_RE.match(inner)
-    if match:
-        name = match.group(1).strip().rstrip(" .,;:-")
-        return (
-            name.replace("“", '"')
-            .replace("”", '"')
-            .replace("‘", "'")
-            .replace("’", "'")
-        )
-
-    # Fallback: support composite cues like "(SB) (Anabel) (17秒)".
+    # Prefer chunk parsing first; it handles composite cues and mixed CJK/English better.
     chunks = re.findall(r"[（(]([^（）()]*)[）)]", stripped)
     for chunk in chunks:
-        candidate = strip_sound_bite_prefix(chunk.strip()).rstrip(" .,;:-")
+        candidate = extract_name_from_cue_segment(chunk.strip())
         if candidate.isupper() and len(candidate) <= 3:
             continue
         if looks_like_english_name(candidate):
@@ -102,6 +147,19 @@ def extract_english_name_hint(text: str) -> str:
                 .replace("‘", "'")
                 .replace("’", "'")
             )
+
+    inner = strip_sound_bite_prefix(stripped[1:-1].strip())
+    match = EN_NAME_HINT_RE.match(inner)
+    if match:
+        name = extract_name_from_cue_segment(match.group(1).strip())
+        if not name:
+            name = match.group(1).strip().rstrip(" .,;:-")
+        return (
+            name.replace("“", '"')
+            .replace("”", '"')
+            .replace("‘", "'")
+            .replace("’", "'")
+        )
     return ""
 
 
