@@ -15,7 +15,7 @@ Outputs:
   ./<base_stem>/<base_stem>_final.docx
   ./<base_stem>/<base_stem>_標題職銜_final.docx
 
-Also moves .mp3 files from current folder into ./<base_stem>/.
+Also copies .mp3 files from current folder into ./<base_stem>/.
 EOH
 }
 
@@ -86,22 +86,22 @@ meta_out="${target_dir}/${base_stem}_標題職銜_final.docx"
   --source-docx "$source_docx" \
   --output "$meta_out"
 
-# Move MP3 assets from current folder into the story output folder.
+# Copy MP3 assets from current folder into the story output folder.
 shopt -s nullglob
-moved_count=0
-moved_names=()
+copied_count=0
+copied_names=()
 for mp3 in ./*.mp3 ./*.mp3:Zone.Identifier; do
-  mv -f "$mp3" "$target_dir/"
-  moved_count=$((moved_count + 1))
-  moved_names+=("$(basename "$mp3")")
+  cp -f "$mp3" "$target_dir/"
+  copied_count=$((copied_count + 1))
+  copied_names+=("$(basename "$mp3")")
 done
 
 echo "[created] $(basename "$news_out")"
 echo "[created] $(basename "$meta_out")"
-if (( moved_count == 0 )); then
-  echo "[moved] 0 files"
+if (( copied_count == 0 )); then
+  echo "[copied] 0 files"
 else
-  for name in "${moved_names[@]}"; do
-    echo "[moved] $name"
+  for name in "${copied_names[@]}"; do
+    echo "[copied] $name"
   done
 fi
