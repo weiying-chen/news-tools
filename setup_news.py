@@ -26,6 +26,11 @@ EN_NAME_HINT_RE = re.compile(
 EN_NAME_VALUE_RE = re.compile(
     r"[A-Za-zÀ-ÖØ-öø-ÿĀ-žḀ-ỹ][A-Za-zÀ-ÖØ-öø-ÿĀ-žḀ-ỹ.\s\"'“”‘’\-]*[A-Za-zÀ-ÖØ-öø-ÿĀ-žḀ-ỹ.]"
 )
+SOUND_BITE_PREFIX_RE = re.compile(r"^\s*SB\s*[:：\-]?\s*")
+
+
+def strip_sound_bite_prefix(text: str) -> str:
+    return SOUND_BITE_PREFIX_RE.sub("", text, count=1)
 
 
 def extract_docx_paragraphs(docx_path: Path) -> list[str]:
@@ -73,7 +78,7 @@ def extract_english_name_hint(text: str) -> str:
     if stripped[0] not in {"(", "（"} or stripped[-1] not in {")", "）"}:
         return ""
 
-    inner = stripped[1:-1].strip()
+    inner = strip_sound_bite_prefix(stripped[1:-1].strip())
     match = EN_NAME_HINT_RE.match(inner)
     if match:
         name = match.group(1).strip().rstrip(" .,;:-")
@@ -87,7 +92,7 @@ def extract_english_name_hint(text: str) -> str:
     # Fallback: support composite cues like "(SB) (Anabel) (17秒)".
     chunks = re.findall(r"[（(]([^（）()]*)[）)]", stripped)
     for chunk in chunks:
-        candidate = chunk.strip().rstrip(" .,;:-")
+        candidate = strip_sound_bite_prefix(chunk.strip()).rstrip(" .,;:-")
         if candidate.isupper() and len(candidate) <= 3:
             continue
         if looks_like_english_name(candidate):
