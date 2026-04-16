@@ -27,6 +27,7 @@ EN_NAME_VALUE_RE = re.compile(
     r"[A-Za-zÀ-ÖØ-öø-ÿĀ-žḀ-ỹ][A-Za-zÀ-ÖØ-öø-ÿĀ-žḀ-ỹ.\s\"'“”‘’\-]*[A-Za-zÀ-ÖØ-öø-ÿĀ-žḀ-ỹ.]"
 )
 SOUND_BITE_PREFIX_RE = re.compile(r"^\s*SB\s*[:：\-]?\s*")
+CUE_PAREN_PREFIX_RE = re.compile(r"^\s*[（(][^（）()]*[）)]\s*(.+?)\s*$")
 EN_PHRASE_RE = re.compile(
     r"[A-Za-zÀ-ÖØ-öø-ÿĀ-žḀ-ỹ][A-Za-zÀ-ÖØ-öø-ÿĀ-žḀ-ỹ.'\-]*"
     r"(?:\s+[A-Za-zÀ-ÖØ-öø-ÿĀ-žḀ-ỹ][A-Za-zÀ-ÖØ-öø-ÿĀ-žḀ-ỹ.'\-]*)*"
@@ -131,29 +132,41 @@ def extract_english_name_hint(text: str) -> str:
     stripped = text.strip()
     if not stripped:
         return ""
-    if stripped[0] not in {"(", "（"} or stripped[-1] not in {")", "）"}:
-        return ""
 
-    # Prefer chunk parsing first; it handles composite cues and mixed CJK/English better.
-    chunks = re.findall(r"[（(]([^（）()]*)[）)]", stripped)
-    for chunk in chunks:
-        candidate = extract_name_from_cue_segment(chunk.strip())
-        if candidate.isupper() and len(candidate) <= 3:
-            continue
-        if looks_like_english_name(candidate):
+    if stripped[0] in {"(", "（"} and stripped[-1] in {")", "）"}:
+        # Prefer chunk parsing first; it handles composite cues and mixed CJK/English better.
+        chunks = re.findall(r"[（(]([^（）()]*)[）)]", stripped)
+        for chunk in chunks:
+            candidate = extract_name_from_cue_segment(chunk.strip())
+            if candidate.isupper() and len(candidate) <= 3:
+                continue
+            if looks_like_english_name(candidate):
+                return (
+                    candidate.replace("“", '"')
+                    .replace("”", '"')
+                    .replace("‘", "'")
+                    .replace("’", "'")
+                )
+
+        inner = strip_sound_bite_prefix(stripped[1:-1].strip())
+        match = EN_NAME_HINT_RE.match(inner)
+        if match:
+            name = extract_name_from_cue_segment(match.group(1).strip())
+            if not name:
+                name = match.group(1).strip().rstrip(" .,;:-")
             return (
-                candidate.replace("“", '"')
+                name.replace("“", '"')
                 .replace("”", '"')
                 .replace("‘", "'")
                 .replace("’", "'")
             )
 
-    inner = strip_sound_bite_prefix(stripped[1:-1].strip())
-    match = EN_NAME_HINT_RE.match(inner)
-    if match:
-        name = extract_name_from_cue_segment(match.group(1).strip())
+    # Support cues like "(13) Rabina" where name follows a parenthesized timing.
+    prefix_match = CUE_PAREN_PREFIX_RE.match(stripped)
+    if prefix_match:
+        name = extract_name_from_cue_segment(prefix_match.group(1).strip())
         if not name:
-            name = match.group(1).strip().rstrip(" .,;:-")
+            name = prefix_match.group(1).strip().rstrip(" .,;:-")
         return (
             name.replace("“", '"')
             .replace("”", '"')
@@ -170,6 +183,14 @@ def looks_like_english_name(text: str) -> bool:
     return bool(EN_NAME_VALUE_RE.fullmatch(candidate))
 
 
+def next_non_empty_line(lines: list[str], idx: int) -> str:
+    for i in range(idx + 1, len(lines)):
+        s = lines[i].strip()
+        if s:
+            return s
+    return ""
+
+
 def detect_people_entries(lines: list[str]) -> list[dict[str, str]]:
     seen: set[str] = set()
     entries: list[dict[str, str]] = []
@@ -177,7 +198,7 @@ def detect_people_entries(lines: list[str]) -> list[dict[str, str]]:
     in_super = False
     consumed_super_header = False
 
-    for line in lines:
+    for idx, line in enumerate(lines):
         s = line.strip()
         if not s:
             continue
@@ -185,6 +206,9 @@ def detect_people_entries(lines: list[str]) -> list[dict[str, str]]:
         english_name = extract_english_name_hint(s)
         if english_name:
             pending_english_names.append(english_name)
+            continue
+        if looks_like_english_name(s) and next_non_empty_line(lines, idx) == "/*SUPER:":
+            pending_english_names.append(s.strip())
             continue
 
         if s == "/*SUPER:":
@@ -209,11 +233,6 @@ def detect_people_entries(lines: list[str]) -> list[dict[str, str]]:
         if not label:
             consumed_super_header = True
             continue
-        if label in seen:
-            consumed_super_header = True
-            continue
-
-        seen.add(label)
         name_en = pending_english_names.pop(0) if pending_english_names else ""
         if not name_en:
             if "｜" in label:
@@ -222,6 +241,18 @@ def detect_people_entries(lines: list[str]) -> list[dict[str, str]]:
                     name_en = right
             elif looks_like_english_name(label):
                 name_en = label
+
+        # Do not generate a label-only PEOPLE row.
+        name_en = name_en.strip()
+        if not name_en:
+            consumed_super_header = True
+            continue
+
+        if label in seen:
+            consumed_super_header = True
+            continue
+
+        seen.add(label)
         entries.append({"label": label, "name_en": name_en})
         consumed_super_header = True
     return entries
@@ -240,9 +271,9 @@ def render_meta_txt(lines: list[str]) -> str:
         "",
         "OVERVIEW:",
         "",
-        "PEOPLE:",
     ]
     if people_entries:
+        out.append("PEOPLE:")
         out.append("")
         for idx, entry in enumerate(people_entries):
             out.append(entry["label"])
@@ -250,8 +281,6 @@ def render_meta_txt(lines: list[str]) -> str:
                 out.append(entry["name_en"].strip())
             if idx < len(people_entries) - 1:
                 out.append("")
-    else:
-        out.append("")
     return "\n".join(out).rstrip() + "\n"
 
 
