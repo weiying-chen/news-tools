@@ -66,14 +66,9 @@ class SetupNewsUnitTest(unittest.TestCase):
         content = setup_module.render_meta_txt(lines)
         self.assertIn('PEOPLE:\n\nReporter｜Alice\nAlice\n', content)
 
-    def test_render_meta_txt_skips_label_when_person_name_missing(self) -> None:
-        lines = [
-            '/*SUPER:',
-            '主持人｜阿明 //',
-            '*/',
-        ]
+    def test_render_meta_txt_omits_people_when_no_entries(self) -> None:
+        lines = ['No super block here']
         content = setup_module.render_meta_txt(lines)
-        self.assertNotIn('主持人｜阿明', content)
         self.assertNotIn('PEOPLE:', content)
 
     def test_setup_news_cli_creates_body_and_meta(self) -> None:

@@ -233,6 +233,11 @@ def detect_people_entries(lines: list[str]) -> list[dict[str, str]]:
         if not label:
             consumed_super_header = True
             continue
+        if label in seen:
+            consumed_super_header = True
+            continue
+
+        seen.add(label)
         name_en = pending_english_names.pop(0) if pending_english_names else ""
         if not name_en:
             if "｜" in label:
@@ -241,19 +246,7 @@ def detect_people_entries(lines: list[str]) -> list[dict[str, str]]:
                     name_en = right
             elif looks_like_english_name(label):
                 name_en = label
-
-        # Do not generate a label-only PEOPLE row.
-        name_en = name_en.strip()
-        if not name_en:
-            consumed_super_header = True
-            continue
-
-        if label in seen:
-            consumed_super_header = True
-            continue
-
-        seen.add(label)
-        entries.append({"label": label, "name_en": name_en})
+        entries.append({"label": label, "name_en": name_en.strip()})
         consumed_super_header = True
     return entries
 
