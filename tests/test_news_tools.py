@@ -10,6 +10,7 @@ from pathlib import Path
 
 SETUP_MODULE_PATH = Path('/home/weiying/python/news-tools/setup_news.py')
 RENAME_MODULE_PATH = Path('/home/weiying/python/news-tools/rename_news_mp3.py')
+GEN_NEWS_PATH = Path('/home/weiying/python/news-tools/gen_news.sh')
 
 
 def load_module(name: str, path: Path):
@@ -55,6 +56,56 @@ class SetupNewsUnitTest(unittest.TestCase):
         ]
         entries = setup_module.detect_people_entries(lines)
         self.assertEqual(entries, [{'label': '主持人｜阿明', 'name_en': 'Anabel'}])
+
+    def test_detect_people_entries_ignores_os_and_keeps_sb_name(self) -> None:
+        lines = [
+            '(Jessica Su)(中文)',
+            '/*SUPER:',
+            '慈濟志工｜蘇美娟//',
+            '*/',
+            '/*SUBT:',
+            '提娃那│//',
+            '希望教室課輔助學 發現教育黑數',
+            '*/',
+            '(OS)',
+            '(SB Jazmin Ramirez)(15秒)',
+            '/*SUPER:',
+            '提娃那希望教室職工｜賈茲敏//',
+            '*/',
+        ]
+        entries = setup_module.detect_people_entries(lines)
+        self.assertEqual(
+            entries,
+            [
+                {'label': '慈濟志工｜蘇美娟', 'name_en': 'Jessica Su'},
+                {'label': '提娃那希望教室職工｜賈茲敏', 'name_en': 'Jazmin Ramirez'},
+            ],
+        )
+
+    def test_detect_people_entries_ignores_subt_entries(self) -> None:
+        lines = [
+            '(Jessica Su)(中文)',
+            '/*SUPER:',
+            '慈濟志工｜蘇美娟//',
+            '*/',
+            '/*SUBT:',
+            '提娃那│//',
+            '希望教室課輔助學 發現教育黑數',
+            '*/',
+            '(OS)',
+            '(SB Jazmin Ramirez)(15秒)',
+            '/*SUPER:',
+            '提娃那希望教室職工｜賈茲敏//',
+            '*/',
+        ]
+        entries = setup_module.detect_people_entries(lines)
+        self.assertEqual(
+            entries,
+            [
+                {'label': '慈濟志工｜蘇美娟', 'name_en': 'Jessica Su'},
+                {'label': '提娃那希望教室職工｜賈茲敏', 'name_en': 'Jazmin Ramirez'},
+            ],
+        )
 
     def test_render_meta_txt_contains_people_block(self) -> None:
         lines = [
@@ -185,6 +236,12 @@ class RenameNewsMp3UnitTest(unittest.TestCase):
             )
             self.assertIn('[summary] planned=1, renamed=1', result.stdout)
             self.assertTrue((story / '1_0016.mp3').exists())
+
+
+class GenNewsScriptUnitTest(unittest.TestCase):
+    def test_gen_news_does_not_copy_zone_identifier_stream_files(self) -> None:
+        script = GEN_NEWS_PATH.read_text(encoding='utf-8')
+        self.assertNotIn('.mp3:Zone.Identifier', script)
 
 
 if __name__ == '__main__':

@@ -37,6 +37,16 @@ ORG_HINT_RE = re.compile(
     r"\b(?:School|University|College|Institute|Campus|Hospital|Foundation)\b",
     re.IGNORECASE,
 )
+NON_NAME_CUE_TOKENS = {
+    "OS",
+    "VO",
+    "SOT",
+    "NAT",
+    "NATSOT",
+    "SB",
+    "CG",
+    "PKG",
+}
 
 
 def strip_sound_bite_prefix(text: str) -> str:
@@ -129,6 +139,16 @@ def normalize_filename(name: str) -> str:
 
 
 def extract_english_name_hint(text: str) -> str:
+    def finalize_name(name: str) -> str:
+        cleaned = (
+            name.replace("“", '"')
+            .replace("”", '"')
+            .replace("‘", "'")
+            .replace("’", "'")
+            .strip()
+        )
+        return cleaned if looks_like_english_name(cleaned) else ""
+
     stripped = text.strip()
     if not stripped:
         return ""
@@ -141,12 +161,7 @@ def extract_english_name_hint(text: str) -> str:
             if candidate.isupper() and len(candidate) <= 3:
                 continue
             if looks_like_english_name(candidate):
-                return (
-                    candidate.replace("“", '"')
-                    .replace("”", '"')
-                    .replace("‘", "'")
-                    .replace("’", "'")
-                )
+                return finalize_name(candidate)
 
         inner = strip_sound_bite_prefix(stripped[1:-1].strip())
         match = EN_NAME_HINT_RE.match(inner)
@@ -154,12 +169,7 @@ def extract_english_name_hint(text: str) -> str:
             name = extract_name_from_cue_segment(match.group(1).strip())
             if not name:
                 name = match.group(1).strip().rstrip(" .,;:-")
-            return (
-                name.replace("“", '"')
-                .replace("”", '"')
-                .replace("‘", "'")
-                .replace("’", "'")
-            )
+            return finalize_name(name)
 
     # Support cues like "(13) Rabina" where name follows a parenthesized timing.
     prefix_match = CUE_PAREN_PREFIX_RE.match(stripped)
@@ -167,12 +177,7 @@ def extract_english_name_hint(text: str) -> str:
         name = extract_name_from_cue_segment(prefix_match.group(1).strip())
         if not name:
             name = prefix_match.group(1).strip().rstrip(" .,;:-")
-        return (
-            name.replace("“", '"')
-            .replace("”", '"')
-            .replace("‘", "'")
-            .replace("’", "'")
-        )
+        return finalize_name(name)
     return ""
 
 
@@ -180,6 +185,13 @@ def looks_like_english_name(text: str) -> bool:
     candidate = text.strip()
     if not candidate:
         return False
+    compact_upper = re.sub(r"[^A-Za-z]", "", candidate).upper()
+    if compact_upper in NON_NAME_CUE_TOKENS:
+        return False
+    # Reject short all-caps cue codes like "OS", "VO", etc.
+    if compact_upper and compact_upper == candidate.replace(" ", "").upper():
+        if len(compact_upper) <= 3 and " " not in candidate:
+            return False
     return bool(EN_NAME_VALUE_RE.fullmatch(candidate))
 
 
@@ -238,7 +250,8 @@ def detect_people_entries(lines: list[str]) -> list[dict[str, str]]:
             continue
 
         seen.add(label)
-        name_en = pending_english_names.pop(0) if pending_english_names else ""
+        # Use the most recent cue nearest to this SUPER block.
+        name_en = pending_english_names.pop() if pending_english_names else ""
         if not name_en:
             if "｜" in label:
                 _, right = [part.strip() for part in label.split("｜", 1)]

@@ -90,7 +90,7 @@ meta_out="${target_dir}/${base_stem}_標題職銜_final.docx"
 shopt -s nullglob
 copied_count=0
 copied_names=()
-for mp3 in ./*.mp3 ./*.mp3:Zone.Identifier; do
+for mp3 in ./*.mp3; do
   cp -f "$mp3" "$target_dir/"
   copied_count=$((copied_count + 1))
   copied_names+=("$(basename "$mp3")")
