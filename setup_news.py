@@ -78,6 +78,14 @@ def extract_name_from_cue_segment(text: str) -> str:
     if not cue:
         return ""
 
+    # Heuristic 0: cues often look like "<name>, <role/title>".
+    if "," in cue:
+        left = cue.split(",", 1)[0].strip()
+        if left:
+            best_left = pick_best_english_phrase(left)
+            if looks_like_english_name(best_left):
+                return best_left
+
     # Heuristic 1: if cue has double spaces, tail often carries the person's name.
     if re.search(r"\s{2,}", cue):
         tail = re.split(r"\s{2,}", cue)[-1].strip()
@@ -152,6 +160,17 @@ def extract_english_name_hint(text: str) -> str:
     stripped = text.strip()
     if not stripped:
         return ""
+
+    # Support lines that start with one/more parenthesized cues, even if text follows.
+    # Example: "(17．Gayansa嘉彥薩)紫衣"
+    leading_chunks_match = re.match(r"^\s*(?:[（(][^（）()]*[）)]\s*)+", stripped)
+    if leading_chunks_match:
+        for chunk in re.findall(r"[（(]([^（）()]*)[）)]", leading_chunks_match.group(0)):
+            candidate = extract_name_from_cue_segment(chunk.strip())
+            if candidate.isupper() and len(candidate) <= 3:
+                continue
+            if looks_like_english_name(candidate):
+                return finalize_name(candidate)
 
     if stripped[0] in {"(", "（"} and stripped[-1] in {")", "）"}:
         # Prefer chunk parsing first; it handles composite cues and mixed CJK/English better.
@@ -242,10 +261,15 @@ def detect_people_entries(lines: list[str]) -> list[dict[str, str]]:
         label = s.replace("│", "｜")
         if label.endswith("//"):
             label = label[:-2].rstrip()
+        label = label.rstrip("｜|:：").rstrip()
         if not label:
             consumed_super_header = True
             continue
         if label in seen:
+            # Duplicate label blocks (same person repeated later) should not leak
+            # their nearest cue into the next distinct SUPER entry.
+            if pending_english_names:
+                pending_english_names.pop()
             consumed_super_header = True
             continue
 

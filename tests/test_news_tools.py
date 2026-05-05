@@ -107,6 +107,87 @@ class SetupNewsUnitTest(unittest.TestCase):
             ],
         )
 
+    def test_detect_people_entries_prefers_name_before_comma_role(self) -> None:
+        lines = [
+            '(11．Abdullah , SL TzuChi scholar)',
+            '/*SUPER:',
+            '慈青營學員｜阿卜杜拉//',
+            '*/',
+        ]
+        entries = setup_module.detect_people_entries(lines)
+        self.assertEqual(
+            entries,
+            [{'label': '慈青營學員｜阿卜杜拉', 'name_en': 'Abdullah'}],
+        )
+
+    def test_detect_people_entries_reads_name_from_leading_parentheses(self) -> None:
+        lines = [
+            '(17．Gayansa嘉彥薩)紫衣',
+            '/*SUPER:',
+            '慈青營學員｜嘉彥薩//',
+            '*/',
+        ]
+        entries = setup_module.detect_people_entries(lines)
+        self.assertEqual(
+            entries,
+            [{'label': '慈青營學員｜嘉彥薩', 'name_en': 'Gayansa'}],
+        )
+
+    def test_detect_people_entries_prefers_full_name_over_single_word(self) -> None:
+        lines = [
+            '(14秒 Pamela；Mancela Aulesu)',
+            '/*SUPER:',
+            '帕梅拉的母親｜瑪麗塞拉//',
+            '*/',
+        ]
+        entries = setup_module.detect_people_entries(lines)
+        self.assertEqual(
+            entries,
+            [{'label': '帕梅拉的母親｜瑪麗塞拉', 'name_en': 'Mancela Aulesu'}],
+        )
+
+    def test_detect_people_entries_discards_pending_name_for_duplicate_label(self) -> None:
+        lines = [
+            '(SB Ivan)(11)',
+            '/*SUPER:',
+            '提娃那衛局社會服務醫生｜伊凡//',
+            '*/',
+            '(SB Sandra)(19秒)',
+            '/*SUPER:',
+            '家長｜珊卓拉//',
+            '*/',
+            '(SB Sandra)(11)',
+            '/*SUPER:',
+            '家長｜珊卓拉//',
+            '*/',
+            '/*SUPER:',
+            '大林慈院口腔顎面外科主任｜劉書呈//',
+            '*/',
+            '(SB Liliana)(12秒)',
+            '/*SUPER:',
+            '家長｜莉莉安娜//',
+            '*/',
+        ]
+        entries = setup_module.detect_people_entries(lines)
+        self.assertEqual(
+            entries,
+            [
+                {'label': '提娃那衛局社會服務醫生｜伊凡', 'name_en': 'Ivan'},
+                {'label': '家長｜珊卓拉', 'name_en': 'Sandra'},
+                {'label': '大林慈院口腔顎面外科主任｜劉書呈', 'name_en': ''},
+                {'label': '家長｜莉莉安娜', 'name_en': 'Liliana'},
+            ],
+        )
+
+    def test_detect_people_entries_strips_trailing_separator_when_name_empty(self) -> None:
+        lines = [
+            '/*SUPER:',
+            '患者｜//',
+            '*/',
+        ]
+        entries = setup_module.detect_people_entries(lines)
+        self.assertEqual(entries, [{'label': '患者', 'name_en': ''}])
+
     def test_render_meta_txt_contains_people_block(self) -> None:
         lines = [
             '(Alice)',
