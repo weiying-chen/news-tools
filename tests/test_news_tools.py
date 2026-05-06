@@ -188,15 +188,27 @@ class SetupNewsUnitTest(unittest.TestCase):
         entries = setup_module.detect_people_entries(lines)
         self.assertEqual(entries, [{'label': '患者', 'name_en': ''}])
 
+    def test_detect_people_entries_skips_label_with_english_right_side(self) -> None:
+        lines = [
+            '/*SUPER:',
+            'Tzu Chi volunteer doctor｜Liao Kuan Hsuan//',
+            '*/',
+            '/*SUPER:',
+            '提娃那衛生局牙科醫師｜Maria//',
+            '*/',
+        ]
+        entries = setup_module.detect_people_entries(lines)
+        self.assertEqual(entries, [])
+
     def test_render_meta_txt_contains_people_block(self) -> None:
         lines = [
             '(Alice)',
             '/*SUPER:',
-            'Reporter｜Alice',
+            '主持人｜阿明',
             '*/',
         ]
         content = setup_module.render_meta_txt(lines)
-        self.assertIn('PEOPLE:\n\nReporter｜Alice\nAlice\n', content)
+        self.assertIn('PEOPLE:\n\n主持人｜阿明\nAlice\n', content)
 
     def test_render_meta_txt_omits_people_when_no_entries(self) -> None:
         lines = ['No super block here']

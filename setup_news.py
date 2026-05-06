@@ -265,6 +265,14 @@ def detect_people_entries(lines: list[str]) -> list[dict[str, str]]:
         if not label:
             consumed_super_header = True
             continue
+        if "｜" in label or "|" in label:
+            if "｜" in label:
+                _, right = [part.strip() for part in label.split("｜", 1)]
+            else:
+                _, right = [part.strip() for part in label.split("|", 1)]
+            if looks_like_english_name(right):
+                consumed_super_header = True
+                continue
         if label in seen:
             # Duplicate label blocks (same person repeated later) should not leak
             # their nearest cue into the next distinct SUPER entry.
