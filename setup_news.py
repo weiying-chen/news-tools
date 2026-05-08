@@ -29,8 +29,8 @@ EN_NAME_VALUE_RE = re.compile(
 SOUND_BITE_PREFIX_RE = re.compile(r"^\s*SB\s*[:：\-]?\s*")
 CUE_PAREN_PREFIX_RE = re.compile(r"^\s*[（(][^（）()]*[）)]\s*(.+?)\s*$")
 EN_PHRASE_RE = re.compile(
-    r"[A-Za-zÀ-ÖØ-öø-ÿĀ-žḀ-ỹ][A-Za-zÀ-ÖØ-öø-ÿĀ-žḀ-ỹ.'\-]*"
-    r"(?:\s+[A-Za-zÀ-ÖØ-öø-ÿĀ-žḀ-ỹ][A-Za-zÀ-ÖØ-öø-ÿĀ-žḀ-ỹ.'\-]*)*"
+    r"[A-Za-zÀ-ÖØ-öø-ÿĀ-žḀ-ỹ][A-Za-zÀ-ÖØ-öø-ÿĀ-žḀ-ỹ.'’‘\-]*"
+    r"(?:\s+[A-Za-zÀ-ÖØ-öø-ÿĀ-žḀ-ỹ][A-Za-zÀ-ÖØ-öø-ÿĀ-žḀ-ỹ.'’‘\-]*)*"
 )
 NAME_TITLE_RE = re.compile(r"^(?:Mr|Ms|Mrs|Miss|Dr|Prof)\.?\b", re.IGNORECASE)
 ORG_HINT_RE = re.compile(

@@ -146,6 +146,19 @@ class SetupNewsUnitTest(unittest.TestCase):
             [{'label': '帕梅拉的母親｜瑪麗塞拉', 'name_en': 'Mancela Aulesu'}],
         )
 
+    def test_detect_people_entries_keeps_curly_apostrophe_name(self) -> None:
+        lines = [
+            '(SB Ahmad Al-Za’anin)(18)',
+            '/*SUPER:',
+            '努拉兒子｜艾哈邁德//',
+            '*/',
+        ]
+        entries = setup_module.detect_people_entries(lines)
+        self.assertEqual(
+            entries,
+            [{'label': '努拉兒子｜艾哈邁德', 'name_en': "Ahmad Al-Za'anin"}],
+        )
+
     def test_detect_people_entries_discards_pending_name_for_duplicate_label(self) -> None:
         lines = [
             '(SB Ivan)(11)',
