@@ -214,6 +214,10 @@ def looks_like_english_name(text: str) -> bool:
     return bool(EN_NAME_VALUE_RE.fullmatch(candidate))
 
 
+def has_cjk(text: str) -> bool:
+    return bool(re.search(r"[\u4e00-\u9fff]", text))
+
+
 def next_non_empty_line(lines: list[str], idx: int) -> str:
     for i in range(idx + 1, len(lines)):
         s = lines[i].strip()
@@ -267,10 +271,10 @@ def detect_people_entries(lines: list[str]) -> list[dict[str, str]]:
             continue
         if "｜" in label or "|" in label:
             if "｜" in label:
-                _, right = [part.strip() for part in label.split("｜", 1)]
+                left, right = [part.strip() for part in label.split("｜", 1)]
             else:
-                _, right = [part.strip() for part in label.split("|", 1)]
-            if looks_like_english_name(right):
+                left, right = [part.strip() for part in label.split("|", 1)]
+            if looks_like_english_name(right) and not has_cjk(left):
                 consumed_super_header = True
                 continue
         if label in seen:

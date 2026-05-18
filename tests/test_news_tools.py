@@ -211,7 +211,25 @@ class SetupNewsUnitTest(unittest.TestCase):
             '*/',
         ]
         entries = setup_module.detect_people_entries(lines)
-        self.assertEqual(entries, [])
+        self.assertEqual(entries, [{'label': '提娃那衛生局牙科醫師｜Maria', 'name_en': 'Maria'}])
+
+    def test_detect_people_entries_keeps_cjk_left_with_english_right(self) -> None:
+        lines = [
+            '/*SUPER:',
+            '藍毘尼佛教慈濟學校人文教師｜Vivek//',
+            '*/',
+            '/*SUPER:',
+            '藍毘尼佛教慈濟學校校長｜Kriti//',
+            '*/',
+        ]
+        entries = setup_module.detect_people_entries(lines)
+        self.assertEqual(
+            entries,
+            [
+                {'label': '藍毘尼佛教慈濟學校人文教師｜Vivek', 'name_en': 'Vivek'},
+                {'label': '藍毘尼佛教慈濟學校校長｜Kriti', 'name_en': 'Kriti'},
+            ],
+        )
 
     def test_render_meta_txt_contains_people_block(self) -> None:
         lines = [
