@@ -18,6 +18,9 @@ NS = {"w": W_NS}
 LEADING_DATE_PAREN_RE = re.compile(
     r"^\s*[（(]\s*[\d]{2,8}(?:[-/.][\d]{1,2}){0,2}\s*[）)]\s*"
 )
+LEADING_DATE_PLAIN_RE = re.compile(
+    r"^\s*[\d]{4,8}(?:[-/.][\d]{1,2}){0,2}\s*(?=[\u4e00-\u9fffA-Za-z_])"
+)
 EN_NAME_HINT_RE = re.compile(
     r'^[\s\d.,，．。:：;；!?！？~\-–—秒分]*'
     r'([A-Za-zÀ-ÖØ-öø-ÿĀ-žḀ-ỹ][A-Za-zÀ-ÖØ-öø-ÿĀ-žḀ-ỹ.\s"“”\'‘’\-]*[A-Za-zÀ-ÖØ-öø-ÿĀ-žḀ-ỹ])'
@@ -141,6 +144,7 @@ def normalize_filename(name: str) -> str:
     stem = Path(name).stem
     suffix = Path(name).suffix
     cleaned_stem = LEADING_DATE_PAREN_RE.sub("", stem).strip()
+    cleaned_stem = LEADING_DATE_PLAIN_RE.sub("", cleaned_stem).strip()
     if not cleaned_stem:
         return name
     return f"{cleaned_stem}{suffix}"

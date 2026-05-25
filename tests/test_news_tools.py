@@ -42,6 +42,10 @@ class SetupNewsUnitTest(unittest.TestCase):
             setup_module.normalize_filename('(0312)Another Story.docx'),
             'Another Story.docx',
         )
+        self.assertEqual(
+            setup_module.normalize_filename('0521西班牙浴佛_final.docx'),
+            '西班牙浴佛_final.docx',
+        )
 
     def test_body_lines_after_marker(self) -> None:
         lines = ['header', '<', '', 'line1', 'line2']
