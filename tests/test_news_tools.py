@@ -6,6 +6,7 @@ import tempfile
 import unittest
 import zipfile
 from pathlib import Path
+from unittest import mock
 
 
 SETUP_MODULE_PATH = Path('/home/weiying/python/news-tools/setup_news.py')
@@ -33,6 +34,13 @@ class SetupNewsUnitTest(unittest.TestCase):
             zf.writestr('word/document.xml', xml)
         return docx_path
 
+    def _make_docx_with_rels(self, xml: str, rels_xml: str, tmp: Path) -> Path:
+        docx_path = tmp / 'sample.docx'
+        with zipfile.ZipFile(docx_path, 'w', compression=zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr('word/document.xml', xml)
+            zf.writestr('word/_rels/document.xml.rels', rels_xml)
+        return docx_path
+
     def test_normalize_filename_strips_leading_date_parentheses(self) -> None:
         self.assertEqual(
             setup_module.normalize_filename('（2026-03-12）Today Story.docx'),
@@ -50,6 +58,42 @@ class SetupNewsUnitTest(unittest.TestCase):
     def test_body_lines_after_marker(self) -> None:
         lines = ['header', '<', '', 'line1', 'line2']
         self.assertEqual(setup_module.body_lines_after_marker(lines), ['line1', 'line2'])
+
+    def test_find_first_url_in_lines_detects_standalone_or_embedded(self) -> None:
+        self.assertEqual(
+            setup_module.find_first_url_in_lines(
+                ['note', 'https://example.com/news/123', 'tail']
+            ),
+            'https://example.com/news/123',
+        )
+        self.assertEqual(
+            setup_module.find_first_url_in_lines(
+                ['Intro', 'Please see https://example.org/story?id=9 for context.']
+            ),
+            'https://example.org/story?id=9',
+        )
+
+    def test_extract_docx_hyperlink_urls(self) -> None:
+        with tempfile.TemporaryDirectory(prefix='news_tools_test_') as tmp:
+            tmp_path = Path(tmp)
+            xml = '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+            xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <w:body>
+    <w:p><w:hyperlink r:id="rId6"><w:r><w:t>DaAi link</w:t></w:r></w:hyperlink></w:p>
+  </w:body>
+</w:document>
+'''
+            rels = '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId6" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="https://www.daai.tv/news/abroad/595486" TargetMode="External"/>
+</Relationships>
+'''
+            docx_path = self._make_docx_with_rels(xml, rels, tmp_path)
+            self.assertEqual(
+                setup_module.extract_docx_hyperlink_urls(docx_path),
+                ['https://www.daai.tv/news/abroad/595486'],
+            )
 
     def test_detect_people_entries_uses_hint_and_super_label(self) -> None:
         lines = [
@@ -291,6 +335,37 @@ class SetupNewsUnitTest(unittest.TestCase):
             meta_txt = (workspace / 'meta.txt').read_text(encoding='utf-8')
             self.assertIn('Body line one\n', body_txt)
             self.assertIn('主持人｜阿明\nAnabel\n', meta_txt)
+
+    def test_run_copies_first_url_to_clipboard(self) -> None:
+        with tempfile.TemporaryDirectory(prefix='news_tools_test_') as tmp:
+            tmp_path = Path(tmp)
+            docx_path = tmp_path / 'sample.docx'
+            docx_path.write_bytes(b'fake')
+            workspace = tmp_path / 'workspace'
+            args = type(
+                'Args',
+                (),
+                {
+                    'input': str(docx_path),
+                    'workspace': str(workspace),
+                    'keep_original': True,
+                    'force': True,
+                },
+            )()
+
+            with mock.patch.object(
+                setup_module, 'extract_docx_paragraphs', return_value=['<', 'See https://example.com/a']
+            ), mock.patch.object(setup_module, 'move_or_copy'), mock.patch.object(
+                setup_module, 'safe_write'
+            ), mock.patch.object(setup_module.subprocess, 'run') as run_mock:
+                rc = setup_module.run(args)
+
+            self.assertEqual(rc, 0)
+            run_mock.assert_called_once_with(
+                ['wl-copy'],
+                input=b'https://example.com/a\n',
+                check=True,
+            )
 
 
 class RenameNewsMp3UnitTest(unittest.TestCase):

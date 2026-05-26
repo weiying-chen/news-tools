@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import re
 import shutil
+import subprocess
 import sys
 import zipfile
 from pathlib import Path
@@ -11,6 +12,8 @@ from xml.etree import ElementTree as ET
 
 W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 NS = {"w": W_NS}
+R_NS = "http://schemas.openxmlformats.org/package/2006/relationships"
+R_NS_MAP = {"r": R_NS}
 
 # Strip a leading date-like parenthesis block, e.g.:
 # "(0312)Title.docx" -> "Title.docx"
@@ -50,6 +53,7 @@ NON_NAME_CUE_TOKENS = {
     "CG",
     "PKG",
 }
+URL_RE = re.compile(r"https?://[^\s<>()\"']+")
 
 
 def strip_sound_bite_prefix(text: str) -> str:
@@ -127,6 +131,25 @@ def extract_docx_paragraphs(docx_path: Path) -> list[str]:
     return paragraphs
 
 
+def extract_docx_hyperlink_urls(docx_path: Path) -> list[str]:
+    with zipfile.ZipFile(docx_path) as zf:
+        try:
+            rels_xml = zf.read("word/_rels/document.xml.rels")
+        except KeyError:
+            return []
+
+    root = ET.fromstring(rels_xml)
+    urls: list[str] = []
+    for rel in root.findall(".//r:Relationship", R_NS_MAP):
+        target = (rel.get("Target") or "").strip()
+        target_mode = (rel.get("TargetMode") or "").strip()
+        if target_mode.lower() != "external":
+            continue
+        if target.lower().startswith(("http://", "https://")):
+            urls.append(target)
+    return urls
+
+
 def body_lines_after_marker(lines: list[str], marker: str = "<") -> list[str]:
     start_idx = 0
     for idx, line in enumerate(lines):
@@ -148,6 +171,23 @@ def normalize_filename(name: str) -> str:
     if not cleaned_stem:
         return name
     return f"{cleaned_stem}{suffix}"
+
+
+def find_first_url_in_lines(lines: list[str]) -> str:
+    for line in lines:
+        match = URL_RE.search(line)
+        if not match:
+            continue
+        return match.group(0).rstrip(".,;:!?)）]}")
+    return ""
+
+
+def copy_to_clipboard(text: str, copy_cmd: str = "wl-copy") -> bool:
+    try:
+        subprocess.run([copy_cmd], input=(text + "\n").encode("utf-8"), check=True)
+        return True
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        return False
 
 
 def extract_english_name_hint(text: str) -> str:
@@ -396,6 +436,14 @@ def run(args: argparse.Namespace) -> int:
     move_or_copy(normalized_input_path, target_docx, keep_original=args.keep_original)
 
     lines = body_lines_after_marker(extract_docx_paragraphs(target_docx))
+    first_url = find_first_url_in_lines(lines)
+    if not first_url:
+        docx_urls = extract_docx_hyperlink_urls(target_docx)
+        first_url = docx_urls[0] if docx_urls else ""
+    if first_url and copy_to_clipboard(first_url):
+        print("[copied] first URL to clipboard")
+    elif first_url:
+        print("[warn] URL found but failed to copy with wl-copy", file=sys.stderr)
     body_txt = workspace / "body.txt"
     meta_txt = workspace / "meta.txt"
     safe_write(body_txt, render_body_txt(lines), force=args.force)
