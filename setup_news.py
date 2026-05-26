@@ -441,7 +441,7 @@ def run(args: argparse.Namespace) -> int:
         docx_urls = extract_docx_hyperlink_urls(target_docx)
         first_url = docx_urls[0] if docx_urls else ""
     if first_url and copy_to_clipboard(first_url):
-        print("[copied] first URL to clipboard")
+        print(f"[copied] {first_url}")
     elif first_url:
         print("[warn] URL found but failed to copy with wl-copy", file=sys.stderr)
     body_txt = workspace / "body.txt"

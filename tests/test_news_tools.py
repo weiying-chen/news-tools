@@ -1,10 +1,12 @@
 import importlib.util
+import io
 import os
 import subprocess
 import sys
 import tempfile
 import unittest
 import zipfile
+from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
 
@@ -358,7 +360,9 @@ class SetupNewsUnitTest(unittest.TestCase):
             ), mock.patch.object(setup_module, 'move_or_copy'), mock.patch.object(
                 setup_module, 'safe_write'
             ), mock.patch.object(setup_module.subprocess, 'run') as run_mock:
-                rc = setup_module.run(args)
+                stdout_buffer = io.StringIO()
+                with redirect_stdout(stdout_buffer):
+                    rc = setup_module.run(args)
 
             self.assertEqual(rc, 0)
             run_mock.assert_called_once_with(
@@ -366,6 +370,7 @@ class SetupNewsUnitTest(unittest.TestCase):
                 input=b'https://example.com/a\n',
                 check=True,
             )
+            self.assertIn('[copied] https://example.com/a', stdout_buffer.getvalue())
 
 
 class RenameNewsMp3UnitTest(unittest.TestCase):
