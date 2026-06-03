@@ -24,13 +24,26 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
   exit 0
 fi
 
-WORD_DIR="/home/weiying/python/word"
-PY="$WORD_DIR/.venv/bin/python"
-NEWS_PY="$WORD_DIR/generate_news.py"
-META_PY="$WORD_DIR/generate_meta.py"
+WORD_DIR="${GEN_NEWS_WORD_DIR:-/home/weiying/python/word}"
+PY="${GEN_NEWS_PYTHON:-$WORD_DIR/.venv/bin/python}"
+NEWS_PY="${GEN_NEWS_NEWS_SCRIPT:-$WORD_DIR/generate_news.py}"
+META_PY="${GEN_NEWS_META_SCRIPT:-$WORD_DIR/generate_meta.py}"
+RENAME_PY="${GEN_NEWS_RENAME_SCRIPT:-/home/weiying/python/news-tools/rename_news_mp3.py}"
 
 if [[ ! -x "$PY" ]]; then
   echo "[error] missing python venv at $PY" >&2
+  exit 1
+fi
+if [[ ! -f "$NEWS_PY" ]]; then
+  echo "[error] generate news script not found: $NEWS_PY" >&2
+  exit 1
+fi
+if [[ ! -f "$META_PY" ]]; then
+  echo "[error] generate meta script not found: $META_PY" >&2
+  exit 1
+fi
+if [[ ! -f "$RENAME_PY" ]]; then
+  echo "[error] rename mp3 script not found: $RENAME_PY" >&2
   exit 1
 fi
 
@@ -96,6 +109,12 @@ for mp3 in ./*.mp3; do
   copied_names+=("$(basename "$mp3")")
 done
 
+rename_output="$("$PY" "$RENAME_PY" "$target_dir" --source-txt body.txt 2>&1)" || {
+  echo "$rename_output" >&2
+  echo "[error] mp3 rename failed" >&2
+  exit 1
+}
+
 echo "[created] $(basename "$news_out")"
 echo "[created] $(basename "$meta_out")"
 if (( copied_count == 0 )); then
@@ -104,4 +123,12 @@ else
   for name in "${copied_names[@]}"; do
     echo "[copied] $name"
   done
+fi
+while IFS= read -r line; do
+  if [[ "$line" =~ ^\[match\]\ (.+)\ \-\>\ (.+)\ \(score= ]]; then
+    echo "[renamed] ${BASH_REMATCH[1]} -> ${BASH_REMATCH[2]}"
+  fi
+done <<< "$rename_output"
+if [[ "$rename_output" =~ renamed=([0-9]+) ]]; then
+  echo "[renamed] ${BASH_REMATCH[1]} files"
 fi
