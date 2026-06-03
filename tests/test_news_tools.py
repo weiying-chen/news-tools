@@ -396,6 +396,17 @@ class RenameNewsMp3UnitTest(unittest.TestCase):
         self.assertGreater(len(cands), 0)
         self.assertEqual(cands[0].timecode, '1_0016')
 
+    def test_score_filename_allows_partial_trailing_token_prefix(self) -> None:
+        score = rename_module.score_filename_against_line(
+            rename_module.normalize_text('Children eagerly wave at the camera. Founded by Ci'),
+            rename_module.normalize_text(
+                'Children eagerly wave at the camera. Founded by Tzu Chi for underprivileged children, '
+                'this center in San Agustín Acasaguastlán, Guatemala, has served the community for 23 years, '
+                'but many of its facilities are now worn out.'
+            ),
+        )
+        self.assertGreaterEqual(score, 0.5)
+
     def test_rename_with_blocks_apply(self) -> None:
         with tempfile.TemporaryDirectory(prefix='news_tools_test_') as tmp:
             story = Path(tmp)

@@ -77,6 +77,24 @@ def prefix_overlap_tokens(a: list[str], b: list[str]) -> int:
     return n
 
 
+def has_partial_trailing_prefix(filename_tokens: list[str], line_tokens: list[str]) -> bool:
+    if len(filename_tokens) < 2 or len(line_tokens) < len(filename_tokens):
+        return False
+    if filename_tokens[:-1] != line_tokens[: len(filename_tokens) - 1]:
+        return False
+
+    tail = filename_tokens[-1]
+    line_tail = line_tokens[len(filename_tokens) - 1]
+    if len(tail) < 2:
+        return False
+    if line_tail.startswith(tail):
+        return True
+
+    # Some exported filename snippets get clipped after the first syllable of a
+    # known pronunciation variant, e.g. "Founded by Ci" for "Founded by Ci Ji".
+    return line_tail == "tzuchi" and tail == "ci"
+
+
 def parse_docx_paragraphs(docx_path: Path) -> list[str]:
     try:
         with zipfile.ZipFile(docx_path) as zf:
@@ -156,9 +174,12 @@ def score_filename_against_line(filename_norm: str, line_norm: str) -> float:
 
     # If filename is an exact prefix of line, reward heavily.
     # This is common when mp3 filenames are truncated sentence snippets.
-    prefix_boost = 0.22 if line_norm.startswith(filename_norm) else 0.0
+    exact_prefix = line_norm.startswith(filename_norm)
+    partial_tail_prefix = has_partial_trailing_prefix(ft, lt)
+    prefix_boost = 0.22 if exact_prefix else 0.0
+    partial_prefix_boost = 0.16 if partial_tail_prefix else 0.0
 
-    return 0.55 * seq + 0.45 * jac + pref_bonus + prefix_boost
+    return 0.55 * seq + 0.45 * jac + pref_bonus + prefix_boost + partial_prefix_boost
 
 
 def best_candidates(stem: str, blocks: list[Block]) -> list[MatchCandidate]:
