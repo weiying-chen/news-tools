@@ -24,6 +24,9 @@ LEADING_DATE_PAREN_RE = re.compile(
 LEADING_DATE_PLAIN_RE = re.compile(
     r"^\s*[\d]{4,8}(?:[-/.][\d]{1,2}){0,2}\s*(?=[\u4e00-\u9fffA-Za-z_])"
 )
+TRAILING_DATE_PAREN_RE = re.compile(
+    r"\s*[（(]\s*[\d]{1,8}(?:[-/.][\d]{1,2}){0,2}\s*[）)]\s*$"
+)
 EN_NAME_HINT_RE = re.compile(
     r'^[\s\d.,，．。:：;；!?！？~\-–—秒分]*'
     r'([A-Za-zÀ-ÖØ-öø-ÿĀ-žḀ-ỹ][A-Za-zÀ-ÖØ-öø-ÿĀ-žḀ-ỹ.\s"“”\'‘’\-]*[A-Za-zÀ-ÖØ-öø-ÿĀ-žḀ-ỹ])'
@@ -41,6 +44,10 @@ EN_PHRASE_RE = re.compile(
 NAME_TITLE_RE = re.compile(r"^(?:Mr|Ms|Mrs|Miss|Dr|Prof)\.?\b", re.IGNORECASE)
 ORG_HINT_RE = re.compile(
     r"\b(?:School|University|College|Institute|Campus|Hospital|Foundation)\b",
+    re.IGNORECASE,
+)
+ROLE_PHRASE_RE = re.compile(
+    r"\b(?:Director|Department|Region|Province|Chairman|President|Senator|Minister|Mayor|Governor|Executive|Officer)\b",
     re.IGNORECASE,
 )
 NON_NAME_CUE_TOKENS = {
@@ -168,6 +175,7 @@ def normalize_filename(name: str) -> str:
     suffix = Path(name).suffix
     cleaned_stem = LEADING_DATE_PAREN_RE.sub("", stem).strip()
     cleaned_stem = LEADING_DATE_PLAIN_RE.sub("", cleaned_stem).strip()
+    cleaned_stem = TRAILING_DATE_PAREN_RE.sub("", cleaned_stem).strip()
     if not cleaned_stem:
         return name
     return f"{cleaned_stem}{suffix}"
@@ -247,6 +255,8 @@ def extract_english_name_hint(text: str) -> str:
 def looks_like_english_name(text: str) -> bool:
     candidate = text.strip()
     if not candidate:
+        return False
+    if " of " in candidate.lower() and ROLE_PHRASE_RE.search(candidate):
         return False
     compact_upper = re.sub(r"[^A-Za-z]", "", candidate).upper()
     if compact_upper in NON_NAME_CUE_TOKENS:
@@ -362,9 +372,21 @@ def render_meta_txt(lines: list[str]) -> str:
         out.append("PEOPLE:")
         out.append("")
         for idx, entry in enumerate(people_entries):
-            out.append(entry["label"])
-            if entry["name_en"].strip():
-                out.append(entry["name_en"].strip())
+            label = entry["label"].strip()
+            name_en = entry["name_en"].strip()
+            rendered_label = label
+
+            if "｜" in label or "|" in label:
+                sep = "｜" if "｜" in label else "|"
+                left, right = [part.strip() for part in label.split(sep, 1)]
+                if looks_like_english_name(right) and has_cjk(left):
+                    rendered_label = left
+                    if not name_en:
+                        name_en = right
+
+            out.append(rendered_label)
+            if name_en:
+                out.append(name_en)
             if idx < len(people_entries) - 1:
                 out.append("")
     return "\n".join(out).rstrip() + "\n"

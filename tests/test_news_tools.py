@@ -56,6 +56,10 @@ class SetupNewsUnitTest(unittest.TestCase):
             setup_module.normalize_filename('0521西班牙浴佛_final.docx'),
             '西班牙浴佛_final.docx',
         )
+        self.assertEqual(
+            setup_module.normalize_filename('證嚴上人開示(5.31).docx'),
+            '證嚴上人開示.docx',
+        )
 
     def test_body_lines_after_marker(self) -> None:
         lines = ['header', '<', '', 'line1', 'line2']
@@ -183,6 +187,33 @@ class SetupNewsUnitTest(unittest.TestCase):
             [{'label': '慈青營學員｜嘉彥薩', 'name_en': 'Gayansa'}],
         )
 
+    def test_detect_people_entries_does_not_leak_previous_name_to_master_label(self) -> None:
+        lines = [
+            '(26" Dr.Voltaire Guadalupe)',
+            '(Director of Department of Health in CALABARZON Region)',
+            '/*SUPER:',
+            '衛生部卡拉巴區區長｜Dr.Voltaire Guadalupe//',
+            '*/',
+            '/*SUPER:',
+            '證嚴上人開示(5.31)｜//',
+            '很感恩',
+            '*/',
+        ]
+        entries = setup_module.detect_people_entries(lines)
+        self.assertEqual(
+            entries,
+            [
+                {
+                    'label': '衛生部卡拉巴區區長｜Dr.Voltaire Guadalupe',
+                    'name_en': 'Dr.Voltaire Guadalupe',
+                },
+                {
+                    'label': '證嚴上人開示(5.31)',
+                    'name_en': '',
+                },
+            ],
+        )
+
     def test_detect_people_entries_prefers_full_name_over_single_word(self) -> None:
         lines = [
             '(14秒 Pamela；Mancela Aulesu)',
@@ -290,6 +321,24 @@ class SetupNewsUnitTest(unittest.TestCase):
         ]
         content = setup_module.render_meta_txt(lines)
         self.assertIn('PEOPLE:\n\n主持人｜阿明\nAlice\n', content)
+
+    def test_render_meta_txt_splits_english_name_from_label(self) -> None:
+        lines = [
+            '/*SUPER:',
+            '衛生部卡拉巴區區長｜Dr. Voltaire Guadalupe',
+            '*/',
+        ]
+        content = setup_module.render_meta_txt(lines)
+        self.assertIn('PEOPLE:\n\n衛生部卡拉巴區區長\nDr. Voltaire Guadalupe\n', content)
+
+    def test_render_meta_txt_keeps_chinese_name_in_label(self) -> None:
+        lines = [
+            '/*SUPER:',
+            '主持人｜阿明',
+            '*/',
+        ]
+        content = setup_module.render_meta_txt(lines)
+        self.assertIn('PEOPLE:\n\n主持人｜阿明\n', content)
 
     def test_render_meta_txt_omits_people_when_no_entries(self) -> None:
         lines = ['No super block here']
