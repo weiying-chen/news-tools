@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 
 
-SCRIPT_PATH = Path('/home/weiying/python/news-tools/gen_news.sh')
+SCRIPT_PATH = Path.home() / 'python' / 'news-tools' / 'gen_news.sh'
 
 
 class GenNewsScriptTest(unittest.TestCase):
@@ -56,23 +56,30 @@ class GenNewsScriptTest(unittest.TestCase):
         )
         fake_rename.chmod(fake_rename.stat().st_mode | stat.S_IXUSR)
 
-        env = dict(os.environ)
-        env.update(
-            {
-                'GEN_NEWS_PYTHON': '/usr/bin/python3',
-                'GEN_NEWS_NEWS_SCRIPT': str(fake_news),
-                'GEN_NEWS_META_SCRIPT': str(fake_meta),
-                'GEN_NEWS_RENAME_SCRIPT': str(fake_rename),
-            }
-        )
-        result = subprocess.run(
-            [str(SCRIPT_PATH), 'sample.docx'],
-            cwd=story_dir,
-            check=True,
-            capture_output=True,
-            text=True,
-            env=env,
-        )
+        word_dir = Path.home() / 'python' / 'word'
+        news_script = word_dir / 'generate_news.py'
+        meta_script = word_dir / 'generate_meta.py'
+        rename_script = Path.home() / 'python' / 'news-tools' / 'rename_news_mp3.py'
+
+        original_news = news_script.read_text(encoding='utf-8')
+        original_meta = meta_script.read_text(encoding='utf-8')
+        original_rename = rename_script.read_text(encoding='utf-8')
+        try:
+            news_script.write_text(fake_news.read_text(encoding='utf-8'), encoding='utf-8')
+            meta_script.write_text(fake_meta.read_text(encoding='utf-8'), encoding='utf-8')
+            rename_script.write_text(fake_rename.read_text(encoding='utf-8'), encoding='utf-8')
+            result = subprocess.run(
+                [str(SCRIPT_PATH), 'sample.docx'],
+                cwd=story_dir,
+                check=True,
+                capture_output=True,
+                text=True,
+                env=dict(os.environ),
+            )
+        finally:
+            news_script.write_text(original_news, encoding='utf-8')
+            meta_script.write_text(original_meta, encoding='utf-8')
+            rename_script.write_text(original_rename, encoding='utf-8')
 
         out_story = story_dir / 'sample'
         self.assertTrue((out_story / 'sample_final.docx').exists())

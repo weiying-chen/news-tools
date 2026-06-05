@@ -11,9 +11,10 @@ from pathlib import Path
 from unittest import mock
 
 
-SETUP_MODULE_PATH = Path('/home/weiying/python/news-tools/setup_news.py')
-RENAME_MODULE_PATH = Path('/home/weiying/python/news-tools/rename_news_mp3.py')
-GEN_NEWS_PATH = Path('/home/weiying/python/news-tools/gen_news.sh')
+TOOLS_ROOT = Path.home() / 'python' / 'news-tools'
+SETUP_MODULE_PATH = TOOLS_ROOT / 'setup_news.py'
+RENAME_MODULE_PATH = TOOLS_ROOT / 'rename_news_mp3.py'
+GEN_NEWS_PATH = TOOLS_ROOT / 'gen_news.sh'
 
 
 def load_module(name: str, path: Path):

@@ -24,11 +24,11 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
   exit 0
 fi
 
-WORD_DIR="${GEN_NEWS_WORD_DIR:-/home/weiying/python/word}"
-PY="${GEN_NEWS_PYTHON:-$WORD_DIR/.venv/bin/python}"
-NEWS_PY="${GEN_NEWS_NEWS_SCRIPT:-$WORD_DIR/generate_news.py}"
-META_PY="${GEN_NEWS_META_SCRIPT:-$WORD_DIR/generate_meta.py}"
-RENAME_PY="${GEN_NEWS_RENAME_SCRIPT:-/home/weiying/python/news-tools/rename_news_mp3.py}"
+WORD_DIR="$HOME/python/word"
+PY="$WORD_DIR/.venv/bin/python"
+NEWS_PY="$WORD_DIR/generate_news.py"
+META_PY="$WORD_DIR/generate_meta.py"
+RENAME_PY="$HOME/python/news-tools/rename_news_mp3.py"
 
 if [[ ! -x "$PY" ]]; then
   echo "[error] missing python venv at $PY" >&2
