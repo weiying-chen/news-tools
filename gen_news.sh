@@ -28,7 +28,7 @@ WORD_DIR="$HOME/python/word"
 PY="$WORD_DIR/.venv/bin/python"
 NEWS_PY="$WORD_DIR/generate_news.py"
 META_PY="$WORD_DIR/generate_meta.py"
-RENAME_PY="$HOME/python/news-tools/rename_news_mp3.py"
+RENAME_PY="$HOME/python/news-tools/rename_news.py"
 
 if [[ ! -x "$PY" ]]; then
   echo "[error] missing python venv at $PY" >&2
