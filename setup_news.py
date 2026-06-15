@@ -341,14 +341,21 @@ def detect_people_entries(lines: list[str]) -> list[dict[str, str]]:
 
         seen.add(label)
         # Use the most recent cue nearest to this SUPER block.
-        name_en = pending_english_names.pop() if pending_english_names else ""
+        right_name = ""
+        if "｜" in label:
+            _, right = [part.strip() for part in label.split("｜", 1)]
+            if looks_like_english_name(right):
+                right_name = right
+        elif looks_like_english_name(label):
+            right_name = label
+
+        if pending_english_names and right_name:
+            pending_english_names.pop()
+            name_en = right_name
+        else:
+            name_en = pending_english_names.pop() if pending_english_names else ""
         if not name_en:
-            if "｜" in label:
-                _, right = [part.strip() for part in label.split("｜", 1)]
-                if looks_like_english_name(right):
-                    name_en = right
-            elif looks_like_english_name(label):
-                name_en = label
+            name_en = right_name
         entries.append({"label": label, "name_en": name_en.strip()})
         consumed_super_header = True
     return entries
