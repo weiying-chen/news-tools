@@ -92,9 +92,9 @@ def extract_name_from_cue_segment(text: str) -> str:
     if not cue:
         return ""
 
-    # Heuristic 0: cues often look like "<name>, <role/title>".
-    if "," in cue:
-        left = cue.split(",", 1)[0].strip()
+    # Heuristic 0: cues often look like "<name>, <role/title/location>".
+    if "," in cue or "，" in cue:
+        left = re.split(r"[,，]", cue, maxsplit=1)[0].strip()
         if left:
             best_left = pick_best_english_phrase(left)
             if looks_like_english_name(best_left):
@@ -262,7 +262,7 @@ def looks_like_english_name(text: str) -> bool:
     if compact_upper in NON_NAME_CUE_TOKENS:
         return False
     # Reject short all-caps cue codes like "OS", "VO", etc.
-    if compact_upper and compact_upper == candidate.replace(" ", "").upper():
+    if compact_upper and candidate == candidate.upper():
         if len(compact_upper) <= 3 and " " not in candidate:
             return False
     return bool(EN_NAME_VALUE_RE.fullmatch(candidate))

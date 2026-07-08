@@ -39,6 +39,50 @@ class SetupNewsPeopleTest(unittest.TestCase):
             ],
         )
 
+    def test_cue_prefers_english_name_before_cjk_location(self) -> None:
+        lines = [
+            '(Chiu Shu Yu 邱慈甄，梅洛市Merlo)',
+            '/*SUPER:',
+            '慈濟阿根廷聯絡處負責人│邱淑玉//',
+            '*/',
+        ]
+
+        self.assertEqual(
+            setup_module.detect_people_entries(lines),
+            [
+                {
+                    'label': '慈濟阿根廷聯絡處負責人｜邱淑玉',
+                    'name_en': 'Chiu Shu Yu',
+                }
+            ],
+        )
+
+    def test_short_mixed_case_english_name_on_label_right_is_kept(self) -> None:
+        lines = [
+            '(8)',
+            '/*SUPER:',
+            '守護天使食堂負責人｜Eva//',
+            '我想感謝基金會//',
+            '*/',
+        ]
+
+        self.assertEqual(
+            setup_module.render_meta_txt(lines),
+            "\n".join(
+                [
+                    "TITLE:",
+                    "",
+                    "OVERVIEW:",
+                    "",
+                    "PEOPLE:",
+                    "",
+                    "守護天使食堂負責人",
+                    "Eva",
+                    "",
+                ]
+            ),
+        )
+
 
 if __name__ == '__main__':
     unittest.main()
