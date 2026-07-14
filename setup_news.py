@@ -50,6 +50,10 @@ ROLE_PHRASE_RE = re.compile(
     r"\b(?:Director|Department|Region|Province|Chairman|President|Senator|Minister|Mayor|Governor|Executive|Officer)\b",
     re.IGNORECASE,
 )
+ROLE_TITLE_START_RE = re.compile(
+    r"\b(?:Executive\s+Director|Director|Chairman|President|Senator|Minister|Mayor|Governor|Officer)\b",
+    re.IGNORECASE,
+)
 NON_NAME_CUE_TOKENS = {
     "OS",
     "VO",
@@ -115,6 +119,13 @@ def extract_name_from_cue_segment(text: str) -> str:
             best_tail = pick_best_english_phrase(tail_after_cjk)
             if looks_like_english_name(best_tail):
                 return best_tail
+
+    role_start = ROLE_TITLE_START_RE.search(cue)
+    if role_start:
+        before_role = cue[: role_start.start()].strip()
+        best_before_role = pick_best_english_phrase(before_role)
+        if looks_like_english_name(best_before_role):
+            return best_before_role
 
     best = pick_best_english_phrase(cue)
     if looks_like_english_name(best):

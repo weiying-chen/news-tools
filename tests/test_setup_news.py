@@ -83,6 +83,24 @@ class SetupNewsPeopleTest(unittest.TestCase):
             ),
         )
 
+    def test_cue_extracts_name_before_english_role_title(self) -> None:
+        lines = [
+            '(SB  Freeman Su Executive Director of NE Region )(7秒)',
+            '/*SUPER:',
+            '慈濟紐約分會執行長｜蘇濟義//',
+            '*/',
+        ]
+
+        self.assertEqual(
+            setup_module.detect_people_entries(lines),
+            [
+                {
+                    'label': '慈濟紐約分會執行長｜蘇濟義',
+                    'name_en': 'Freeman Su',
+                }
+            ],
+        )
+
 
 if __name__ == '__main__':
     unittest.main()
