@@ -291,6 +291,21 @@ def next_non_empty_line(lines: list[str], idx: int) -> str:
     return ""
 
 
+def split_label_name(label: str) -> tuple[str, str]:
+    if "｜" in label:
+        return tuple(part.strip() for part in label.split("｜", 1))
+    if "|" in label:
+        return tuple(part.strip() for part in label.split("|", 1))
+
+    parts = re.split(r"\s{2,}", label, maxsplit=1)
+    if len(parts) == 2:
+        left, right = [part.strip() for part in parts]
+        if has_cjk(left) and looks_like_english_name(right):
+            return left, right
+
+    return label.strip(), ""
+
+
 def detect_people_entries(lines: list[str]) -> list[dict[str, str]]:
     seen: set[str] = set()
     entries: list[dict[str, str]] = []
@@ -334,14 +349,10 @@ def detect_people_entries(lines: list[str]) -> list[dict[str, str]]:
         if not label:
             consumed_super_header = True
             continue
-        if "｜" in label or "|" in label:
-            if "｜" in label:
-                left, right = [part.strip() for part in label.split("｜", 1)]
-            else:
-                left, right = [part.strip() for part in label.split("|", 1)]
-            if looks_like_english_name(right) and not has_cjk(left):
-                consumed_super_header = True
-                continue
+        left, right = split_label_name(label)
+        if right and looks_like_english_name(right) and not has_cjk(left):
+            consumed_super_header = True
+            continue
         if label in seen:
             # Duplicate label blocks (same person repeated later) should not leak
             # their nearest cue into the next distinct SUPER entry.
@@ -353,10 +364,9 @@ def detect_people_entries(lines: list[str]) -> list[dict[str, str]]:
         seen.add(label)
         # Use the most recent cue nearest to this SUPER block.
         right_name = ""
-        if "｜" in label:
-            _, right = [part.strip() for part in label.split("｜", 1)]
-            if looks_like_english_name(right):
-                right_name = right
+        _, right = split_label_name(label)
+        if looks_like_english_name(right):
+            right_name = right
         elif looks_like_english_name(label):
             right_name = label
 
@@ -394,13 +404,11 @@ def render_meta_txt(lines: list[str]) -> str:
             name_en = entry["name_en"].strip()
             rendered_label = label
 
-            if "｜" in label or "|" in label:
-                sep = "｜" if "｜" in label else "|"
-                left, right = [part.strip() for part in label.split(sep, 1)]
-                if looks_like_english_name(right) and has_cjk(left):
-                    rendered_label = left
-                    if not name_en:
-                        name_en = right
+            left, right = split_label_name(label)
+            if looks_like_english_name(right) and has_cjk(left):
+                rendered_label = left
+                if not name_en:
+                    name_en = right
 
             out.append(rendered_label)
             if name_en:

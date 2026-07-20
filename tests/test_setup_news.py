@@ -101,6 +101,32 @@ class SetupNewsPeopleTest(unittest.TestCase):
             ],
         )
 
+    def test_multispace_cjk_role_english_name_label_is_split(self) -> None:
+        lines = [
+            '(15，伊曼紐)',
+            '/*SUPER:',
+            '慈濟志工    Emmanule//',
+            '在這一區 我們有屬於//',
+            '*/',
+        ]
+
+        self.assertEqual(
+            setup_module.render_meta_txt(lines),
+            "\n".join(
+                [
+                    "TITLE:",
+                    "",
+                    "OVERVIEW:",
+                    "",
+                    "PEOPLE:",
+                    "",
+                    "慈濟志工",
+                    "Emmanule",
+                    "",
+                ]
+            ),
+        )
+
 
 if __name__ == '__main__':
     unittest.main()
