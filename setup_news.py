@@ -37,6 +37,9 @@ EN_NAME_VALUE_RE = re.compile(
 )
 SOUND_BITE_PREFIX_RE = re.compile(r"^\s*SB\s*[:：\-]?\s*")
 CUE_PAREN_PREFIX_RE = re.compile(r"^\s*[（(][^（）()]*[）)]\s*(.+?)\s*$")
+NUMBERED_PAREN_NAME_RE = re.compile(
+    r"^\s*\d+\s*[（(]\s*([^（）()]+?)\s*[）)]\s*$"
+)
 EN_PHRASE_RE = re.compile(
     r"[A-Za-zÀ-ÖØ-öø-ÿĀ-žḀ-ỹ][A-Za-zÀ-ÖØ-öø-ÿĀ-žḀ-ỹ.'’‘\-]*"
     r"(?:\s+[A-Za-zÀ-ÖØ-öø-ÿĀ-žḀ-ỹ][A-Za-zÀ-ÖØ-öø-ÿĀ-žḀ-ỹ.'’‘\-]*)*"
@@ -223,6 +226,11 @@ def extract_english_name_hint(text: str) -> str:
     stripped = text.strip()
     if not stripped:
         return ""
+
+    numbered_name_match = NUMBERED_PAREN_NAME_RE.match(stripped)
+    if numbered_name_match:
+        candidate = extract_name_from_cue_segment(numbered_name_match.group(1))
+        return finalize_name(candidate)
 
     # Support lines that start with one/more parenthesized cues, even if text follows.
     # Example: "(17．Gayansa嘉彥薩)紫衣"

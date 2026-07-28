@@ -20,6 +20,25 @@ setup_module = load_module('setup_news', SETUP_MODULE_PATH)
 
 
 class SetupNewsPeopleTest(unittest.TestCase):
+    def test_number_before_parenthesized_name_is_used_for_next_super(self) -> None:
+        lines = [
+            '30(Rocio)',
+            '/*SUPER:',
+            '慈濟志工｜羅西歐//',
+            '我能理解哥哥//',
+            '*/',
+        ]
+
+        self.assertEqual(
+            setup_module.detect_people_entries(lines),
+            [
+                {
+                    'label': '慈濟志工｜羅西歐',
+                    'name_en': 'Rocio',
+                }
+            ],
+        )
+
     def test_cjk_label_english_right_overrides_location_cue(self) -> None:
         lines = [
             '(15" Machache)(秒數更正)',
