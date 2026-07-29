@@ -3,7 +3,8 @@
 
 Expected workflow:
 - Each story folder contains one `*_final.docx` (excluding `*_標題職銜_final.docx`).
-- The docx includes lines like `1_0016`, `2_0035`, etc.
+- The script includes bare timecodes like `0016`, `0035`, etc.
+- Output MP3 prefixes are assigned from the timecodes' order.
 - MP3 files may be named with sentence snippets (often from English VO text).
 
 The script extracts timecode blocks from docx, fuzzy-matches filename stems to those
@@ -24,6 +25,7 @@ from typing import Iterable
 
 # Accept whatever appears in script timecodes after "_" (e.g. 3_059, 3_0059).
 TIMECODE_RE = re.compile(r"^(\d+_\d+)$")
+BARE_TIMECODE_RE = re.compile(r"^(\d{3,4})$")
 
 
 @dataclass
@@ -37,6 +39,13 @@ class MatchCandidate:
     timecode: str
     score: float
     matched_line: str
+
+
+def parse_timecode(line: str, position: int) -> str:
+    bare = BARE_TIMECODE_RE.match(line)
+    if bare:
+        return f"{position}_{bare.group(1)}"
+    return ""
 
 
 def normalize_text(s: str) -> str:
@@ -121,9 +130,9 @@ def extract_blocks(docx_path: Path) -> list[Block]:
 
     for raw in lines:
         line = raw.strip()
-        m = TIMECODE_RE.match(line)
-        if m:
-            current = Block(timecode=m.group(1), lines=[])
+        timecode = parse_timecode(line, len(blocks) + 1)
+        if timecode:
+            current = Block(timecode=timecode, lines=[])
             blocks.append(current)
             continue
         if current is None:
@@ -145,9 +154,9 @@ def extract_blocks_from_txt(txt_path: Path) -> list[Block]:
         line = raw.strip()
         if not line:
             continue
-        m = TIMECODE_RE.match(line)
-        if m:
-            current = Block(timecode=m.group(1), lines=[])
+        timecode = parse_timecode(line, len(blocks) + 1)
+        if timecode:
+            current = Block(timecode=timecode, lines=[])
             blocks.append(current)
             continue
         if current is None:
