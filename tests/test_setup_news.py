@@ -20,6 +20,24 @@ setup_module = load_module('setup_news', SETUP_MODULE_PATH)
 
 
 class SetupNewsPeopleTest(unittest.TestCase):
+    def test_parenthesized_name_with_extra_spaces_keeps_full_name(self) -> None:
+        lines = [
+            '(Helena  Hung)',
+            '/*SUPER:',
+            '慈濟墨西哥負責人｜洪良岱//',
+            '*/',
+        ]
+
+        self.assertEqual(
+            setup_module.detect_people_entries(lines),
+            [
+                {
+                    'label': '慈濟墨西哥負責人｜洪良岱',
+                    'name_en': 'Helena Hung',
+                }
+            ],
+        )
+
     def test_number_before_parenthesized_name_is_used_for_next_super(self) -> None:
         lines = [
             '30(Rocio)',

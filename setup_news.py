@@ -109,6 +109,14 @@ def extract_name_from_cue_segment(text: str) -> str:
 
     # Heuristic 1: if cue has double spaces, tail often carries the person's name.
     if re.search(r"\s{2,}", cue):
+        normalized_cue = re.sub(r"\s+", " ", cue)
+        if (
+            not has_cjk(cue)
+            and not ROLE_TITLE_START_RE.search(cue)
+            and looks_like_english_name(normalized_cue)
+        ):
+            return normalized_cue
+
         tail = re.split(r"\s{2,}", cue)[-1].strip()
         if tail:
             best_tail = pick_best_english_phrase(tail)
