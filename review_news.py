@@ -284,6 +284,7 @@ def build_mpv_command(
         "--aid=2",
         "--vo=wlshm",
         "--ao=pulse",
+        "--autofit=960x540",
         "--force-window=yes",
         str(video),
     ]
