@@ -125,9 +125,10 @@ class ReviewNewsTest(unittest.TestCase):
         self.assertEqual(command[0], 'mpv')
         self.assertIn('--external-file=/cache/english.m4a', command)
         self.assertIn('--aid=2', command)
-        self.assertIn('--vo=wlshm', command)
+        self.assertIn('--vo=sdl', command)
         self.assertIn('--ao=pulse', command)
         self.assertIn('--autofit=960x540', command)
+        self.assertIn('--geometry=50%:50%', command)
         self.assertFalse(any(arg.startswith('--lavfi-complex=') for arg in command))
         self.assertEqual(command[-1], '/story/video.webm')
 

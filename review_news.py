@@ -282,9 +282,10 @@ def build_mpv_command(
         mpv,
         f"--external-file={timeline}",
         "--aid=2",
-        "--vo=wlshm",
+        "--vo=sdl",
         "--ao=pulse",
         "--autofit=960x540",
+        "--geometry=50%:50%",
         "--force-window=yes",
         str(video),
     ]
