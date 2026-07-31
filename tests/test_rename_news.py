@@ -21,6 +21,31 @@ rename_module = load_module('rename_news', RENAME_MODULE_PATH)
 
 
 class RenameNewsBlocksTest(unittest.TestCase):
+    def test_one_letter_tail_is_truncated_after_long_matching_prefix(self) -> None:
+        filename_tokens = 'volunteers bring winter supplies across the region c'.split()
+        line_tokens = (
+            'volunteers bring winter supplies across the region communities '
+            'receive blankets and warm clothing'
+        ).split()
+
+        self.assertTrue(
+            rename_module.has_partial_trailing_prefix(
+                filename_tokens,
+                line_tokens,
+            )
+        )
+
+    def test_one_letter_c_matches_normalized_tzu_chi_after_long_prefix(self) -> None:
+        filename_tokens = 'cold weather continues across south america c'.split()
+        line_tokens = 'cold weather continues across south america tzuchi volunteers'.split()
+
+        self.assertTrue(
+            rename_module.has_partial_trailing_prefix(
+                filename_tokens,
+                line_tokens,
+            )
+        )
+
     def test_prefixed_mp3_name_is_not_accepted_as_script_timecode(self) -> None:
         self.assertEqual(rename_module.parse_timecode('1_0016', 1), '')
 

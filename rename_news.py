@@ -94,14 +94,14 @@ def has_partial_trailing_prefix(filename_tokens: list[str], line_tokens: list[st
 
     tail = filename_tokens[-1]
     line_tail = line_tokens[len(filename_tokens) - 1]
-    if len(tail) < 2:
+    if len(tail) < 2 and len(filename_tokens) - 1 < 5:
         return False
     if line_tail.startswith(tail):
         return True
 
     # Some exported filename snippets get clipped after the first syllable of a
     # known pronunciation variant, e.g. "Founded by Ci" for "Founded by Ci Ji".
-    return line_tail == "tzuchi" and tail == "ci"
+    return line_tail == "tzuchi" and tail in {"c", "ci"}
 
 
 def parse_docx_paragraphs(docx_path: Path) -> list[str]:
