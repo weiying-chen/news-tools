@@ -6,6 +6,9 @@ import re
 import shutil
 import subprocess
 import sys
+import urllib.error
+import urllib.parse
+import urllib.request
 import zipfile
 from pathlib import Path
 from xml.etree import ElementTree as ET
@@ -68,6 +71,11 @@ NON_NAME_CUE_TOKENS = {
     "PKG",
 }
 URL_RE = re.compile(r"https?://[^\s<>()\"']+")
+YOUTUBE_ID_RE = re.compile(
+    r'\\"?YTID\\"?\s*:\s*\\"?([A-Za-z0-9_-]{11})\\"?'
+)
+NEWS_ID_RE = re.compile(r'\\"?NewsID\\"?\s*:\s*(\d+)')
+NEWS_JSON_RE = re.compile(r"var\s+newsJson\s*=\s*'([^\r\n]*)")
 
 
 def strip_sound_bite_prefix(text: str) -> str:
@@ -218,6 +226,69 @@ def copy_to_clipboard(text: str, copy_cmd: str = "wl-copy") -> bool:
         return True
     except (FileNotFoundError, subprocess.CalledProcessError):
         return False
+
+
+def extract_youtube_url_from_daai_html(
+    html_text: str,
+    news_id: str | None = None,
+) -> str:
+    news_objects = NEWS_JSON_RE.findall(html_text)
+    candidates = news_objects or [html_text]
+    for candidate in candidates:
+        if news_id:
+            id_match = NEWS_ID_RE.search(candidate)
+            if not id_match or id_match.group(1) != news_id:
+                continue
+        youtube_match = YOUTUBE_ID_RE.search(candidate)
+        if youtube_match:
+            return f"https://www.youtube.com/watch?v={youtube_match.group(1)}"
+    return ""
+
+
+def resolve_youtube_url(source_url: str, timeout: float = 30.0) -> str:
+    hostname = (urllib.parse.urlparse(source_url).hostname or "").lower()
+    if hostname == "youtu.be" or hostname == "youtube.com" or hostname.endswith(
+        ".youtube.com"
+    ):
+        return source_url
+    if hostname != "daai.tv" and not hostname.endswith(".daai.tv"):
+        return ""
+
+    request = urllib.request.Request(
+        source_url,
+        headers={"User-Agent": "Mozilla/5.0"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            html_text = response.read().decode("utf-8", errors="replace")
+    except (OSError, urllib.error.URLError) as error:
+        raise RuntimeError(f"failed to load Da Ai page: {error}") from error
+
+    path_parts = urllib.parse.urlparse(source_url).path.rstrip("/").split("/")
+    news_id = path_parts[-1] if path_parts[-1].isdigit() else None
+    youtube_url = extract_youtube_url_from_daai_html(html_text, news_id=news_id)
+    if not youtube_url:
+        raise RuntimeError("Da Ai page does not contain a YouTube video ID")
+    return youtube_url
+
+
+def build_youtube_download_command(youtube_url: str, workspace: Path) -> list[str]:
+    return [
+        "yt-dlp",
+        "--no-playlist",
+        "--paths",
+        str(workspace),
+        youtube_url,
+    ]
+
+
+def download_youtube_video(youtube_url: str, workspace: Path) -> None:
+    if not shutil.which("yt-dlp"):
+        raise RuntimeError("required program not found in PATH: yt-dlp")
+    subprocess.run(
+        build_youtube_download_command(youtube_url, workspace),
+        check=True,
+    )
 
 
 def extract_english_name_hint(text: str) -> str:
@@ -504,10 +575,6 @@ def run(args: argparse.Namespace) -> int:
     if not first_url:
         docx_urls = extract_docx_hyperlink_urls(target_docx)
         first_url = docx_urls[0] if docx_urls else ""
-    if first_url and copy_to_clipboard(first_url):
-        print(f"[copied] {first_url}")
-    elif first_url:
-        print("[warn] URL found but failed to copy with wl-copy", file=sys.stderr)
     body_txt = workspace / "body.txt"
     meta_txt = workspace / "meta.txt"
     safe_write(body_txt, render_body_txt(lines), force=args.force)
@@ -516,6 +583,27 @@ def run(args: argparse.Namespace) -> int:
     print(f"[created] {target_docx.name}")
     print(f"[created] {body_txt.name}")
     print(f"[created] {meta_txt.name}")
+
+    if first_url:
+        try:
+            youtube_url = resolve_youtube_url(first_url)
+        except RuntimeError as error:
+            print(f"[error] {error}", file=sys.stderr)
+            return 1
+
+        clipboard_url = youtube_url or first_url
+        if copy_to_clipboard(clipboard_url):
+            print(f"[copied] {clipboard_url}")
+        else:
+            print("[warn] URL found but failed to copy with wl-copy", file=sys.stderr)
+
+        if youtube_url:
+            try:
+                download_youtube_video(youtube_url, workspace)
+            except (RuntimeError, subprocess.CalledProcessError) as error:
+                print(f"[error] YouTube download failed: {error}", file=sys.stderr)
+                return 1
+            print(f"[downloaded] {youtube_url}")
     return 0
 
 

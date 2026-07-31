@@ -20,6 +20,34 @@ setup_module = load_module('setup_news', SETUP_MODULE_PATH)
 
 
 class SetupNewsPeopleTest(unittest.TestCase):
+    def test_daai_html_youtube_id_becomes_canonical_watch_url(self) -> None:
+        html = r'''
+            var newsJson = '{\"NewsID\":111111,\"YTID\":\"Rhs8Q5uRQsA\"}';
+            var newsJson = '{\"NewsID\":597547,\"YTID\":\"tCL86SwAlFI\"}';
+        '''
+
+        self.assertEqual(
+            setup_module.extract_youtube_url_from_daai_html(html, news_id='597547'),
+            'https://www.youtube.com/watch?v=tCL86SwAlFI',
+        )
+
+    def test_youtube_download_command_targets_workspace(self) -> None:
+        command = setup_module.build_youtube_download_command(
+            'https://www.youtube.com/watch?v=tCL86SwAlFI',
+            Path('/work/news'),
+        )
+
+        self.assertEqual(
+            command,
+            [
+                'yt-dlp',
+                '--no-playlist',
+                '--paths',
+                '/work/news',
+                'https://www.youtube.com/watch?v=tCL86SwAlFI',
+            ],
+        )
+
     def test_parenthesized_name_with_extra_spaces_keeps_full_name(self) -> None:
         lines = [
             '(Helena  Hung)',
