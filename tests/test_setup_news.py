@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 
 
-SETUP_MODULE_PATH = Path('/home/weiying/python/news-tools/setup_news.py')
+SETUP_MODULE_PATH = Path(__file__).resolve().parents[1] / 'setup_news.py'
 
 
 def load_module(name: str, path: Path):

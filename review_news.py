@@ -17,7 +17,7 @@ from typing import Sequence
 
 VIDEO_EXTENSIONS = {".mkv", ".mov", ".mp4", ".webm"}
 NARRATION_RE = re.compile(r"^\d+_(\d{3,4})\.mp3$", re.IGNORECASE)
-CACHE_VERSION = 3
+CACHE_VERSION = 4
 
 
 @dataclass(frozen=True)
@@ -201,7 +201,7 @@ def cache_is_current(
 def cache_paths(directory: Path, cache_root: Path) -> tuple[Path, Path]:
     key = hashlib.sha256(str(directory.resolve()).encode("utf-8")).hexdigest()[:16]
     cache_directory = cache_root / key
-    return cache_directory / "mixed-timeline.flac", cache_directory / "manifest.json"
+    return cache_directory / "mixed-timeline.mka", cache_directory / "manifest.json"
 
 
 def probe_duration(ffprobe: str, video: Path) -> float:
@@ -282,10 +282,8 @@ def build_mpv_command(
         mpv,
         f"--external-file={timeline}",
         "--aid=2",
-        "--vo=sdl",
-        "--ao=pulse",
-        "--autofit=960x540",
-        "--geometry=50%:50%",
+        "--profile=fast",
+        "--geometry=1280x720",
         "--force-window=yes",
         str(video),
     ]

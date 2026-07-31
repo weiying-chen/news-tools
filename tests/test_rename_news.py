@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 
 
-RENAME_MODULE_PATH = Path('/home/weiying/python/news-tools/rename_news.py')
+RENAME_MODULE_PATH = Path(__file__).resolve().parents[1] / 'rename_news.py'
 
 
 def load_module(name: str, path: Path):
