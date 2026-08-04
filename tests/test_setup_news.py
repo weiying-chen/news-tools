@@ -20,6 +20,22 @@ setup_module = load_module('setup_news', SETUP_MODULE_PATH)
 
 
 class SetupNewsPeopleTest(unittest.TestCase):
+    def test_reports_super_labels_missing_english_names(self) -> None:
+        lines = [
+            '(12 seconds Maria)',
+            '/*SUPER:',
+            '畢業生｜瑪麗亞//',
+            '*/',
+            '/*SUPER:',
+            '慈濟志工｜陳大明//',
+            '*/',
+        ]
+
+        self.assertEqual(
+            setup_module.find_super_labels_missing_english_names(lines),
+            ['慈濟志工｜陳大明'],
+        )
+
     def test_daai_html_youtube_id_becomes_canonical_watch_url(self) -> None:
         html = r'''
             var newsJson = '{\"NewsID\":111111,\"YTID\":\"Rhs8Q5uRQsA\"}';

@@ -469,6 +469,14 @@ def detect_people_entries(lines: list[str]) -> list[dict[str, str]]:
     return entries
 
 
+def find_super_labels_missing_english_names(lines: list[str]) -> list[str]:
+    return [
+        entry["label"]
+        for entry in detect_people_entries(lines)
+        if not entry["name_en"]
+    ]
+
+
 def render_body_txt(lines: list[str]) -> str:
     if not lines:
         return ""
