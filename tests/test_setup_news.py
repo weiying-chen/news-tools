@@ -20,6 +20,31 @@ setup_module = load_module('setup_news', SETUP_MODULE_PATH)
 
 
 class SetupNewsPeopleTest(unittest.TestCase):
+    def test_multiple_named_labels_in_one_super_block_are_included(self) -> None:
+        lines = [
+            '/*SUPER:',
+            '拉羅馬那慈濟小學前校長｜瑪麗亞//',
+            '感謝慈濟//',
+            '(NS 3秒)',
+            '大愛電視節目資深企畫｜吳志怡//',
+            '在畢業典禮現場//',
+            '*/',
+        ]
+
+        self.assertEqual(
+            setup_module.detect_people_entries(lines),
+            [
+                {
+                    'label': '拉羅馬那慈濟小學前校長｜瑪麗亞',
+                    'name_en': '',
+                },
+                {
+                    'label': '大愛電視節目資深企畫｜吳志怡',
+                    'name_en': '',
+                },
+            ],
+        )
+
     def test_reports_super_labels_missing_english_names(self) -> None:
         lines = [
             '(12 seconds Maria)',

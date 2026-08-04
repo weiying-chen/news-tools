@@ -393,6 +393,15 @@ def split_label_name(label: str) -> tuple[str, str]:
     return label.strip(), ""
 
 
+def looks_like_named_super_label(text: str) -> bool:
+    candidate = text.strip().replace("│", "｜")
+    if not candidate.endswith("//"):
+        return False
+    label = candidate[:-2].rstrip()
+    role, name = split_label_name(label)
+    return bool(role and name and ("｜" in label or "|" in label))
+
+
 def detect_people_entries(lines: list[str]) -> list[dict[str, str]]:
     seen: set[str] = set()
     entries: list[dict[str, str]] = []
@@ -426,7 +435,7 @@ def detect_people_entries(lines: list[str]) -> list[dict[str, str]]:
             consumed_super_header = False
             continue
 
-        if consumed_super_header:
+        if consumed_super_header and not looks_like_named_super_label(s):
             continue
 
         label = s.replace("│", "｜")
