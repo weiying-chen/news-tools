@@ -129,8 +129,8 @@ class ReviewNewsTest(unittest.TestCase):
         self.assertNotIn('--ao=pulse', command)
         self.assertNotIn('--hwdec=auto', command)
         self.assertIn('--profile=fast', command)
-        self.assertIn('--geometry=1280x720', command)
-        self.assertNotIn('--autofit=960x540', command)
+        self.assertIn('--autofit=1280x720', command)
+        self.assertIn('--geometry=50%:50%', command)
         self.assertFalse(any(arg.startswith('--lavfi-complex=') for arg in command))
         self.assertEqual(command[-1], '/story/video.webm')
 

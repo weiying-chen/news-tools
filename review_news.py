@@ -283,7 +283,8 @@ def build_mpv_command(
         f"--external-file={timeline}",
         "--aid=2",
         "--profile=fast",
-        "--geometry=1280x720",
+        "--autofit=1280x720",
+        "--geometry=50%:50%",
         "--force-window=yes",
         str(video),
     ]
