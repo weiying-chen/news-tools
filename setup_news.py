@@ -591,6 +591,8 @@ def run(args: argparse.Namespace) -> int:
     print(f"[created] {target_docx.name}")
     print(f"[created] {body_txt.name}")
     print(f"[created] {meta_txt.name}")
+    for label in find_super_labels_missing_english_names(lines):
+        print(f"[warn] SUPER missing English name: {label}", file=sys.stderr)
 
     if first_url:
         try:
