@@ -28,7 +28,6 @@ WORD_DIR="$HOME/python/word"
 PY="$WORD_DIR/.venv/bin/python"
 NEWS_PY="$WORD_DIR/generate_news.py"
 META_PY="$WORD_DIR/generate_meta.py"
-RENAME_PY="$HOME/python/news-tools/rename_news.py"
 
 if [[ ! -x "$PY" ]]; then
   echo "[error] missing python venv at $PY" >&2
@@ -42,11 +41,6 @@ if [[ ! -f "$META_PY" ]]; then
   echo "[error] generate meta script not found: $META_PY" >&2
   exit 1
 fi
-if [[ ! -f "$RENAME_PY" ]]; then
-  echo "[error] rename mp3 script not found: $RENAME_PY" >&2
-  exit 1
-fi
-
 source_docx="${1:-}"
 if [[ -z "$source_docx" ]]; then
   mapfile -t docx_files < <(find . -maxdepth 1 -type f -name '*.docx' | sort)
@@ -109,12 +103,6 @@ for mp3 in ./*.mp3; do
   copied_names+=("$(basename "$mp3")")
 done
 
-rename_output="$("$PY" "$RENAME_PY" "$target_dir" --source-txt body.txt 2>&1)" || {
-  echo "$rename_output" >&2
-  echo "[error] mp3 rename failed" >&2
-  exit 1
-}
-
 echo "[created] $(basename "$news_out")"
 echo "[created] $(basename "$meta_out")"
 if (( copied_count == 0 )); then
@@ -123,12 +111,4 @@ else
   for name in "${copied_names[@]}"; do
     echo "[copied] $name"
   done
-fi
-while IFS= read -r line; do
-  if [[ "$line" =~ ^\[match\]\ (.+)\ \-\>\ (.+)\ \(score= ]]; then
-    echo "[renamed] ${BASH_REMATCH[1]} -> ${BASH_REMATCH[2]}"
-  fi
-done <<< "$rename_output"
-if [[ "$rename_output" =~ renamed=([0-9]+) ]]; then
-  echo "[renamed] ${BASH_REMATCH[1]} files"
 fi
