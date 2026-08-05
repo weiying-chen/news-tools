@@ -387,7 +387,7 @@ def split_label_name(label: str) -> tuple[str, str]:
     parts = re.split(r"\s{2,}", label, maxsplit=1)
     if len(parts) == 2:
         left, right = [part.strip() for part in parts]
-        if has_cjk(left) and looks_like_english_name(right):
+        if has_cjk(left) and (has_cjk(right) or looks_like_english_name(right)):
             return left, right
 
     return label.strip(), ""
@@ -513,6 +513,8 @@ def render_meta_txt(lines: list[str]) -> str:
                 rendered_label = left
                 if not name_en:
                     name_en = right
+            elif has_cjk(left) and has_cjk(right):
+                rendered_label = f"{left}｜{right}"
 
             out.append(rendered_label)
             if name_en:

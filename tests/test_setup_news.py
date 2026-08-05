@@ -188,6 +188,7 @@ class SetupNewsPeopleTest(unittest.TestCase):
                 ]
             ),
         )
+        self.assertEqual(setup_module.render_body_txt(lines), "\n".join(lines) + "\n")
 
     def test_cue_extracts_name_before_english_role_title(self) -> None:
         lines = [
@@ -229,6 +230,31 @@ class SetupNewsPeopleTest(unittest.TestCase):
                     "慈濟志工",
                     "Emmanule",
                     "",
+                ]
+            ),
+        )
+
+    def test_multispace_cjk_role_and_name_are_normalized_in_meta(self) -> None:
+        lines = [
+            '(11秒)',
+            '/*SUPER:',
+            '大愛村居民    賽爾瓦//',
+            '嗯 我很感謝志工//',
+            '*/',
+        ]
+
+        self.assertEqual(
+            setup_module.render_meta_txt(lines),
+            "\n".join(
+                [
+                    'TITLE:',
+                    '',
+                    'OVERVIEW:',
+                    '',
+                    'PEOPLE:',
+                    '',
+                    '大愛村居民｜賽爾瓦',
+                    '',
                 ]
             ),
         )
