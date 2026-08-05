@@ -4,6 +4,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 REVIEW_MODULE_PATH = Path(__file__).resolve().parents[1] / 'review_news.py'
@@ -120,6 +121,7 @@ class ReviewNewsTest(unittest.TestCase):
             mpv='mpv',
             video=Path('/story/video.webm'),
             timeline=Path('/cache/english.m4a'),
+            window_title='review-news-123',
         )
 
         self.assertEqual(command[0], 'mpv')
@@ -131,8 +133,79 @@ class ReviewNewsTest(unittest.TestCase):
         self.assertIn('--profile=fast', command)
         self.assertIn('--autofit=1280x720', command)
         self.assertIn('--geometry=50%:50%', command)
+        self.assertIn('--focus-on=all', command)
+        self.assertIn('--no-window-minimized', command)
+        self.assertIn('--title=review-news-123', command)
         self.assertFalse(any(arg.startswith('--lavfi-complex=') for arg in command))
         self.assertEqual(command[-1], '/story/video.webm')
+
+    def test_windows_center_command_targets_named_window(self) -> None:
+        command = review_module.build_windows_center_command(
+            powershell='powershell.exe',
+            window_title='review-news-123',
+        )
+
+        self.assertEqual(command[:3], [
+            'powershell.exe', '-NoProfile', '-NonInteractive',
+        ])
+        self.assertEqual(command[-1], 'review-news-123')
+        script = command[command.index('-Command') + 1]
+        self.assertIn('FindWindow', script)
+        self.assertIn('ShowWindow', script)
+        self.assertIn('SetForegroundWindow', script)
+        self.assertIn('SwitchToThisWindow', script)
+        self.assertIn('SetWindowPos', script)
+        self.assertIn('new IntPtr(-1)', script)
+        self.assertIn('new IntPtr(-2)', script)
+        self.assertIn('SystemParametersInfo', script)
+
+    def test_wsl_center_helper_does_not_share_mpv_terminal(self) -> None:
+        player = mock.Mock()
+        player.wait.return_value = 0
+        with (
+            mock.patch.object(review_module, 'running_in_wsl', return_value=True),
+            mock.patch.object(
+                review_module,
+                'find_windows_mpv',
+                return_value='/mnt/c/Program Files/MPV Player/mpv.exe',
+            ),
+            mock.patch.object(
+                review_module,
+                'to_windows_path',
+                side_effect=[
+                    r'\\wsl.localhost\Ubuntu\story\video.webm',
+                    r'\\wsl.localhost\Ubuntu\cache\english.m4a',
+                ],
+            ),
+            mock.patch.object(review_module.shutil, 'which', return_value='powershell.exe'),
+            mock.patch.object(
+                review_module.subprocess,
+                'Popen',
+                return_value=player,
+            ) as popen,
+            mock.patch.object(review_module.subprocess, 'run') as run,
+        ):
+            review_module.play_video(
+                mpv='mpv',
+                video=Path('/story/video.webm'),
+                timeline=Path('/cache/english.m4a'),
+            )
+
+        player_command = popen.call_args.args[0]
+        self.assertEqual(
+            player_command[0],
+            '/mnt/c/Program Files/MPV Player/mpv.exe',
+        )
+        self.assertIn(
+            r'--external-file=\\wsl.localhost\Ubuntu\cache\english.m4a',
+            player_command,
+        )
+        self.assertEqual(
+            player_command[-1],
+            r'\\wsl.localhost\Ubuntu\story\video.webm',
+        )
+        self.assertEqual(run.call_args.kwargs['stdout'], review_module.subprocess.DEVNULL)
+        self.assertEqual(run.call_args.kwargs['stderr'], review_module.subprocess.DEVNULL)
 
     def test_cache_uses_fast_lossless_mixed_audio(self) -> None:
         output, manifest = review_module.cache_paths(

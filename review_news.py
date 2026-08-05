@@ -6,6 +6,8 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
+import platform
 import re
 import shutil
 import subprocess
@@ -275,8 +277,9 @@ def ensure_timeline(
 def build_mpv_command(
     *,
     mpv: str,
-    video: Path,
-    timeline: Path,
+    video: Path | str,
+    timeline: Path | str,
+    window_title: str,
 ) -> list[str]:
     return [
         mpv,
@@ -285,9 +288,146 @@ def build_mpv_command(
         "--profile=fast",
         "--autofit=1280x720",
         "--geometry=50%:50%",
+        "--focus-on=all",
+        "--no-window-minimized",
+        f"--title={window_title}",
         "--force-window=yes",
         str(video),
     ]
+
+
+WINDOWS_CENTER_SCRIPT = r"""
+Add-Type @'
+using System;
+using System.Runtime.InteropServices;
+public static class ReviewNewsNative {
+    public static readonly IntPtr TopMost = new IntPtr(-1);
+    public static readonly IntPtr NotTopMost = new IntPtr(-2);
+    [StructLayout(LayoutKind.Sequential)]
+    public struct Rect { public int Left, Top, Right, Bottom; }
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    public static extern IntPtr FindWindow(string className, string windowName);
+    [DllImport("user32.dll")]
+    public static extern bool GetWindowRect(IntPtr window, out Rect rect);
+    [DllImport("user32.dll")]
+    public static extern bool SystemParametersInfo(
+        uint action, uint parameter, out Rect value, uint flags);
+    [DllImport("user32.dll")]
+    public static extern bool ShowWindow(IntPtr window, int command);
+    [DllImport("user32.dll")]
+    public static extern bool SetForegroundWindow(IntPtr window);
+    [DllImport("user32.dll")]
+    public static extern void SwitchToThisWindow(IntPtr window, bool alternateTab);
+    [DllImport("user32.dll")]
+    public static extern bool SetWindowPos(
+        IntPtr window, IntPtr after, int x, int y, int width, int height,
+        uint flags);
+}
+'@
+$title = $args[0]
+$window = [IntPtr]::Zero
+for ($attempt = 0; $attempt -lt 50; $attempt++) {
+    $window = [ReviewNewsNative]::FindWindow($null, $title)
+    if ($window -ne [IntPtr]::Zero) { break }
+    Start-Sleep -Milliseconds 100
+}
+if ($window -eq [IntPtr]::Zero) { exit 1 }
+[void][ReviewNewsNative]::ShowWindow($window, 9)
+$windowRect = New-Object ReviewNewsNative+Rect
+$workArea = New-Object ReviewNewsNative+Rect
+if (-not [ReviewNewsNative]::GetWindowRect($window, [ref]$windowRect)) { exit 1 }
+if (-not [ReviewNewsNative]::SystemParametersInfo(
+        48, 0, [ref]$workArea, 0)) { exit 1 }
+$width = $windowRect.Right - $windowRect.Left
+$height = $windowRect.Bottom - $windowRect.Top
+$x = $workArea.Left + [Math]::Max(0, [int](
+    (($workArea.Right - $workArea.Left) - $width) / 2))
+$y = $workArea.Top + [Math]::Max(0, [int](
+    (($workArea.Bottom - $workArea.Top) - $height) / 2))
+if (-not [ReviewNewsNative]::SetWindowPos(
+        $window, [ReviewNewsNative]::TopMost, $x, $y, 0, 0, 65)) { exit 1 }
+if (-not [ReviewNewsNative]::SetWindowPos(
+        $window, [ReviewNewsNative]::NotTopMost, 0, 0, 0, 0, 67)) { exit 1 }
+[void][ReviewNewsNative]::SetForegroundWindow($window)
+[ReviewNewsNative]::SwitchToThisWindow($window, $true)
+""".strip()
+
+
+def build_windows_center_command(
+    *,
+    powershell: str,
+    window_title: str,
+) -> list[str]:
+    return [
+        powershell,
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        WINDOWS_CENTER_SCRIPT,
+        window_title,
+    ]
+
+
+def running_in_wsl() -> bool:
+    return "microsoft" in platform.release().lower()
+
+
+def find_windows_mpv() -> str:
+    executable = shutil.which("mpv.exe")
+    if executable:
+        return executable
+    installed = Path("/mnt/c/Program Files/MPV Player/mpv.exe")
+    if installed.is_file():
+        return str(installed)
+    raise RuntimeError(
+        "Windows mpv not found; install it with: "
+        "winget.exe install --id shinchiro.mpv --exact"
+    )
+
+
+def to_windows_path(path: Path) -> str:
+    result = subprocess.run(
+        ["wslpath", "-w", str(path)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return result.stdout.strip()
+
+
+def play_video(*, mpv: str, video: Path, timeline: Path) -> None:
+    window_title = f"review-news-{os.getpid()}"
+    if running_in_wsl():
+        mpv = find_windows_mpv()
+        video = to_windows_path(video)
+        timeline = to_windows_path(timeline)
+    command = build_mpv_command(
+        mpv=mpv,
+        video=video,
+        timeline=timeline,
+        window_title=window_title,
+    )
+    powershell = shutil.which("powershell.exe") if running_in_wsl() else None
+    if not powershell:
+        subprocess.run(command, check=True)
+        return
+
+    player = subprocess.Popen(command)
+    try:
+        subprocess.run(
+            build_windows_center_command(
+                powershell=powershell,
+                window_title=window_title,
+            ),
+            check=False,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    finally:
+        return_code = player.wait()
+    if return_code:
+        raise subprocess.CalledProcessError(return_code, command)
 
 
 def find_program(name: str) -> str:
@@ -352,14 +492,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"[timeline] {state}: {timeline}")
         print(f"[video] {video.name}")
         print(f"[narration] {len(clips)} MP3 files")
-        subprocess.run(
-            build_mpv_command(
-                mpv=mpv,
-                video=video,
-                timeline=timeline,
-            ),
-            check=True,
-        )
+        play_video(mpv=mpv, video=video, timeline=timeline)
     except (OSError, RuntimeError, ValueError, subprocess.CalledProcessError) as error:
         print(f"[error] {error}", file=sys.stderr)
         return 1
