@@ -23,6 +23,22 @@ review_module = load_module('review_news', REVIEW_MODULE_PATH)
 
 
 class ReviewNewsTest(unittest.TestCase):
+    def test_review_prepares_untimed_narration_mp3s_from_body_text(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            directory = Path(tmp_dir)
+            (directory / 'body.txt').write_text(
+                '0016\nFirst spoken narration line\n',
+                encoding='utf-8',
+            )
+            original = directory / 'First spoken narration line.mp3'
+            original.touch()
+
+            renamed = review_module.prepare_narration_files(directory)
+
+            self.assertEqual(renamed, 1)
+            self.assertFalse(original.exists())
+            self.assertTrue((directory / '1_0016.mp3').is_file())
+
     def test_timestamped_mp3_filename_becomes_timeline_clip(self) -> None:
         clip = review_module.parse_narration_clip(Path('2_0118.mp3'))
 

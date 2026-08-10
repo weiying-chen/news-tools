@@ -16,6 +16,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
 
+import rename_news
+
 
 VIDEO_EXTENSIONS = {".mkv", ".mov", ".mp4", ".webm"}
 NARRATION_RE = re.compile(r"^\d+_(\d{3,4})\.mp3$", re.IGNORECASE)
@@ -26,6 +28,38 @@ CACHE_VERSION = 4
 class NarrationClip:
     path: Path
     start_seconds: int
+
+
+def prepare_narration_files(directory: Path) -> int:
+    untimed = sorted(
+        path
+        for path in directory.glob("*.mp3")
+        if path.is_file() and not NARRATION_RE.fullmatch(path.name)
+    )
+    if not untimed:
+        return 0
+
+    source = directory / "body.txt"
+    if not source.is_file():
+        raise ValueError(
+            f"cannot rename untimed MP3 files without {source.name}: "
+            + ", ".join(path.name for path in untimed)
+        )
+
+    _, renamed = rename_news.rename_in_story(
+        story_dir=directory,
+        min_score=0.50,
+        apply=True,
+        source_txt=source,
+    )
+    remaining = sorted(
+        path.name
+        for path in directory.glob("*.mp3")
+        if path.is_file() and not NARRATION_RE.fullmatch(path.name)
+    )
+    if remaining:
+        raise ValueError("unconverted MP3 files remain: " + ", ".join(remaining))
+    return renamed
 
 
 def parse_narration_clip(path: Path) -> NarrationClip:
@@ -472,6 +506,9 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     try:
         directory = Path.cwd()
+        renamed = prepare_narration_files(directory)
+        if renamed:
+            print(f"[renamed] {renamed} MP3 files")
         video, clips = discover_media(directory, args.video)
         ffmpeg = find_program("ffmpeg")
         ffprobe = find_program("ffprobe")
