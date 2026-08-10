@@ -113,6 +113,32 @@ class ReviewNewsTest(unittest.TestCase):
         self.assertNotIn('-b:a', command)
         self.assertEqual(command[-1], '/cache/mixed.flac')
 
+    def test_chapter_file_marks_each_narration_start_with_its_filename(self) -> None:
+        clips = [
+            review_module.NarrationClip(Path('/story/1_0015.mp3'), 15),
+            review_module.NarrationClip(Path('/story/2_0042.mp3'), 42),
+        ]
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            chapters = Path(tmp_dir) / 'chapters.ffmetadata'
+
+            review_module.write_chapter_file(chapters, clips, video_duration=70.0)
+
+            content = chapters.read_text(encoding='utf-8')
+
+        self.assertIn('START=15000\nEND=42000\ntitle=1_0015.mp3', content)
+        self.assertIn('START=42000\nEND=70000\ntitle=2_0042.mp3', content)
+
+    def test_review_shortcuts_move_between_narration_chapters(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            input_config = Path(tmp_dir) / 'input.conf'
+
+            review_module.write_input_config(input_config)
+
+            self.assertEqual(
+                input_config.read_text(encoding='utf-8'),
+                'Ctrl+LEFT add chapter -1\nCtrl+RIGHT add chapter 1\n',
+            )
+
     def test_unchanged_sources_reuse_cached_timeline(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             directory = Path(tmp_dir)
@@ -142,11 +168,15 @@ class ReviewNewsTest(unittest.TestCase):
             mpv='mpv',
             video=Path('/story/video.webm'),
             timeline=Path('/cache/english.m4a'),
+            chapters=Path('/cache/chapters.ffmetadata'),
+            input_config=Path('/cache/input.conf'),
             window_title='review-news-123',
         )
 
         self.assertEqual(command[0], 'mpv')
         self.assertIn('--external-file=/cache/english.m4a', command)
+        self.assertIn('--chapters-file=/cache/chapters.ffmetadata', command)
+        self.assertIn('--input-conf=/cache/input.conf', command)
         self.assertIn('--aid=2', command)
         self.assertNotIn('--vo=sdl', command)
         self.assertNotIn('--ao=pulse', command)
@@ -196,6 +226,8 @@ class ReviewNewsTest(unittest.TestCase):
                 side_effect=[
                     r'\\wsl.localhost\Ubuntu\story\video.webm',
                     r'\\wsl.localhost\Ubuntu\cache\english.m4a',
+                    r'\\wsl.localhost\Ubuntu\cache\chapters.ffmetadata',
+                    r'\\wsl.localhost\Ubuntu\cache\input.conf',
                 ],
             ),
             mock.patch.object(review_module.shutil, 'which', return_value='powershell.exe'),
@@ -210,6 +242,8 @@ class ReviewNewsTest(unittest.TestCase):
                 mpv='mpv',
                 video=Path('/story/video.webm'),
                 timeline=Path('/cache/english.m4a'),
+                chapters=Path('/cache/chapters.ffmetadata'),
+                input_config=Path('/cache/input.conf'),
             )
 
         player_command = popen.call_args.args[0]
@@ -219,6 +253,14 @@ class ReviewNewsTest(unittest.TestCase):
         )
         self.assertIn(
             r'--external-file=\\wsl.localhost\Ubuntu\cache\english.m4a',
+            player_command,
+        )
+        self.assertIn(
+            r'--chapters-file=\\wsl.localhost\Ubuntu\cache\chapters.ffmetadata',
+            player_command,
+        )
+        self.assertIn(
+            r'--input-conf=\\wsl.localhost\Ubuntu\cache\input.conf',
             player_command,
         )
         self.assertEqual(

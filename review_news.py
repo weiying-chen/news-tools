@@ -243,6 +243,48 @@ def cache_paths(directory: Path, cache_root: Path) -> tuple[Path, Path]:
     return cache_directory / "mixed-timeline.mka", cache_directory / "manifest.json"
 
 
+def _escape_ffmetadata(value: str) -> str:
+    return re.sub(r"([\\;#=])", r"\\\1", value).replace("\n", r"\n")
+
+
+def write_chapter_file(
+    output: Path,
+    clips: Sequence[NarrationClip],
+    video_duration: float,
+) -> None:
+    duration_ms = round(video_duration * 1000)
+    clips_within_video = [
+        clip for clip in clips if clip.start_seconds * 1000 < duration_ms
+    ]
+    lines = [";FFMETADATA1"]
+    for index, clip in enumerate(clips_within_video):
+        start_ms = clip.start_seconds * 1000
+        end_ms = (
+            clips_within_video[index + 1].start_seconds * 1000
+            if index + 1 < len(clips_within_video)
+            else duration_ms
+        )
+        lines.extend(
+            [
+                "[CHAPTER]",
+                "TIMEBASE=1/1000",
+                f"START={start_ms}",
+                f"END={end_ms}",
+                f"title={_escape_ffmetadata(clip.path.name)}",
+            ]
+        )
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def write_input_config(output: Path) -> None:
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(
+        "Ctrl+LEFT add chapter -1\nCtrl+RIGHT add chapter 1\n",
+        encoding="utf-8",
+    )
+
+
 def probe_duration(ffprobe: str, video: Path) -> float:
     result = subprocess.run(
         [
@@ -271,8 +313,8 @@ def probe_duration(ffprobe: str, video: Path) -> float:
 def ensure_timeline(
     *,
     ffmpeg: str,
-    ffprobe: str,
     video: Path,
+    video_duration: float,
     clips: Sequence[NarrationClip],
     output: Path,
     manifest: Path,
@@ -283,8 +325,7 @@ def ensure_timeline(
     if not rebuild and cache_is_current(output, manifest, fingerprint):
         return False
 
-    duration = probe_duration(ffprobe, video)
-    clips_within_video = [clip for clip in clips if clip.start_seconds < duration]
+    clips_within_video = [clip for clip in clips if clip.start_seconds < video_duration]
     if not clips_within_video:
         raise ValueError("all narration timestamps are after the end of the video")
 
@@ -294,7 +335,7 @@ def ensure_timeline(
         ffmpeg=ffmpeg,
         video=video,
         clips=clips_within_video,
-        video_duration=duration,
+        video_duration=video_duration,
         output=temporary,
         english_volume=english_volume,
     )
@@ -316,11 +357,15 @@ def build_mpv_command(
     mpv: str,
     video: Path | str,
     timeline: Path | str,
+    chapters: Path | str,
+    input_config: Path | str,
     window_title: str,
 ) -> list[str]:
     return [
         mpv,
         f"--external-file={timeline}",
+        f"--chapters-file={chapters}",
+        f"--input-conf={input_config}",
         "--aid=2",
         "--profile=fast",
         "--autofit=1280x720",
@@ -432,16 +477,27 @@ def to_windows_path(path: Path) -> str:
     return result.stdout.strip()
 
 
-def play_video(*, mpv: str, video: Path, timeline: Path) -> None:
+def play_video(
+    *,
+    mpv: str,
+    video: Path,
+    timeline: Path,
+    chapters: Path,
+    input_config: Path,
+) -> None:
     window_title = f"review-news-{os.getpid()}"
     if running_in_wsl():
         mpv = find_windows_mpv()
         video = to_windows_path(video)
         timeline = to_windows_path(timeline)
+        chapters = to_windows_path(chapters)
+        input_config = to_windows_path(input_config)
     command = build_mpv_command(
         mpv=mpv,
         video=video,
         timeline=timeline,
+        chapters=chapters,
+        input_config=input_config,
         window_title=window_title,
     )
     powershell = shutil.which("powershell.exe") if running_in_wsl() else None
@@ -518,21 +574,32 @@ def main(argv: Sequence[str] | None = None) -> int:
         mpv = find_program("mpv")
         cache_root = Path.home() / ".cache" / "review-news"
         timeline, manifest = cache_paths(directory, cache_root)
+        chapters = timeline.with_name("chapters.ffmetadata")
+        input_config = timeline.with_name("input.conf")
+        video_duration = probe_duration(ffprobe, video)
         rebuilt = ensure_timeline(
             ffmpeg=ffmpeg,
-            ffprobe=ffprobe,
             video=video,
+            video_duration=video_duration,
             clips=clips,
             output=timeline,
             manifest=manifest,
             rebuild=args.rebuild,
             english_volume=args.english_volume,
         )
+        write_chapter_file(chapters, clips, video_duration)
+        write_input_config(input_config)
         state = "created" if rebuilt else "cached"
         print(f"[timeline] {state}: {timeline}")
         print(f"[video] {video.name}")
         print(f"[narration] {len(clips)} MP3 files")
-        play_video(mpv=mpv, video=video, timeline=timeline)
+        play_video(
+            mpv=mpv,
+            video=video,
+            timeline=timeline,
+            chapters=chapters,
+            input_config=input_config,
+        )
     except (OSError, RuntimeError, ValueError, subprocess.CalledProcessError) as error:
         print(f"[error] {error}", file=sys.stderr)
         return 1
