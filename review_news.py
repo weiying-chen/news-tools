@@ -4,7 +4,9 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
+import io
 import json
 import os
 import platform
@@ -46,12 +48,13 @@ def prepare_narration_files(directory: Path) -> int:
             + ", ".join(path.name for path in untimed)
         )
 
-    _, renamed = rename_news.rename_in_story(
-        story_dir=directory,
-        min_score=0.50,
-        apply=True,
-        source_txt=source,
-    )
+    with contextlib.redirect_stdout(io.StringIO()):
+        _, renamed = rename_news.rename_in_story(
+            story_dir=directory,
+            min_score=0.50,
+            apply=True,
+            source_txt=source,
+        )
     remaining = sorted(
         path.name
         for path in directory.glob("*.mp3")

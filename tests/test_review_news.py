@@ -1,4 +1,6 @@
 import importlib.util
+import contextlib
+import io
 import json
 import sys
 import tempfile
@@ -33,9 +35,12 @@ class ReviewNewsTest(unittest.TestCase):
             original = directory / 'First spoken narration line.mp3'
             original.touch()
 
-            renamed = review_module.prepare_narration_files(directory)
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                renamed = review_module.prepare_narration_files(directory)
 
             self.assertEqual(renamed, 1)
+            self.assertEqual(output.getvalue(), '')
             self.assertFalse(original.exists())
             self.assertTrue((directory / '1_0016.mp3').is_file())
 
