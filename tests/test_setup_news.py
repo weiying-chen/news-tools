@@ -72,6 +72,17 @@ class SetupNewsPeopleTest(unittest.TestCase):
             'https://www.youtube.com/watch?v=tCL86SwAlFI',
         )
 
+    def test_daai_popup_news_youtube_id_is_extracted(self) -> None:
+        html = r'''
+            var newsJson = '{\"NewsID\":597848,\"YTID\":\"0Qkh8jlG8_4\"}';
+            var popupNews = '{\"NewsID\":597791,\"YTID\":\"ujuoJF5IKfk\"}';
+        '''
+
+        self.assertEqual(
+            setup_module.extract_youtube_url_from_daai_html(html, news_id='597791'),
+            'https://www.youtube.com/watch?v=ujuoJF5IKfk',
+        )
+
     def test_youtube_download_command_targets_workspace(self) -> None:
         command = setup_module.build_youtube_download_command(
             'https://www.youtube.com/watch?v=tCL86SwAlFI',

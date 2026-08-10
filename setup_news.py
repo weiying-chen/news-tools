@@ -75,7 +75,7 @@ YOUTUBE_ID_RE = re.compile(
     r'\\"?YTID\\"?\s*:\s*\\"?([A-Za-z0-9_-]{11})\\"?'
 )
 NEWS_ID_RE = re.compile(r'\\"?NewsID\\"?\s*:\s*(\d+)')
-NEWS_JSON_RE = re.compile(r"var\s+newsJson\s*=\s*'([^\r\n]*)")
+NEWS_JSON_RE = re.compile(r"var\s+(?:newsJson|popupNews)\s*=\s*'([^\r\n]*)")
 
 
 def strip_sound_bite_prefix(text: str) -> str:
