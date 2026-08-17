@@ -386,6 +386,7 @@ def build_mpv_command(
         "--geometry=50%:50%",
         "--focus-on=all",
         "--no-window-minimized",
+        "--keep-open=yes",
         f"--title={window_title}",
         "--force-window=yes",
         str(video),

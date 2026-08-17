@@ -209,6 +209,7 @@ class ReviewNewsTest(unittest.TestCase):
         self.assertIn('--geometry=50%:50%', command)
         self.assertIn('--focus-on=all', command)
         self.assertIn('--no-window-minimized', command)
+        self.assertIn('--keep-open=yes', command)
         self.assertIn('--title=review-news-123', command)
         self.assertFalse(any(arg.startswith('--lavfi-complex=') for arg in command))
         self.assertEqual(command[-1], '/story/video.webm')
