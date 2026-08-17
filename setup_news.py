@@ -276,6 +276,8 @@ def build_youtube_download_command(youtube_url: str, workspace: Path) -> list[st
     return [
         "yt-dlp",
         "--no-playlist",
+        "--js-runtimes",
+        "node",
         "--paths",
         str(workspace),
         youtube_url,

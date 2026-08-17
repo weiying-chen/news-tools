@@ -94,6 +94,8 @@ class SetupNewsPeopleTest(unittest.TestCase):
             [
                 'yt-dlp',
                 '--no-playlist',
+                '--js-runtimes',
+                'node',
                 '--paths',
                 '/work/news',
                 'https://www.youtube.com/watch?v=tCL86SwAlFI',
