@@ -38,23 +38,24 @@ def prepare_narration_files(directory: Path) -> int:
         for path in directory.glob("*.mp3")
         if path.is_file() and not NARRATION_RE.fullmatch(path.name)
     )
-    if not untimed:
-        return 0
-
     source = directory / "body.txt"
     if not source.is_file():
+        if not untimed:
+            return 0
         raise ValueError(
             f"cannot rename untimed MP3 files without {source.name}: "
             + ", ".join(path.name for path in untimed)
         )
 
-    with contextlib.redirect_stdout(io.StringIO()):
-        _, renamed = rename_news.rename_in_story(
-            story_dir=directory,
-            min_score=0.50,
-            apply=True,
-            source_txt=source,
-        )
+    renamed = 0
+    if untimed:
+        with contextlib.redirect_stdout(io.StringIO()):
+            _, renamed = rename_news.rename_in_story(
+                story_dir=directory,
+                min_score=0.50,
+                apply=True,
+                source_txt=source,
+            )
     remaining = sorted(
         path.name
         for path in directory.glob("*.mp3")
@@ -62,6 +63,16 @@ def prepare_narration_files(directory: Path) -> int:
     )
     if remaining:
         raise ValueError("unconverted MP3 files remain: " + ", ".join(remaining))
+
+    blocks = rename_news.extract_blocks_from_txt(source)
+    missing, extra = rename_news.find_timecode_mismatches(directory, blocks)
+    problems: list[str] = []
+    if missing:
+        problems.append("missing MP3 for timecode: " + ", ".join(missing))
+    if extra:
+        problems.append("extra MP3 with no body timecode: " + ", ".join(extra))
+    if problems:
+        raise ValueError("; ".join(problems))
     return renamed
 
 

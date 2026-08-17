@@ -44,6 +44,22 @@ class ReviewNewsTest(unittest.TestCase):
             self.assertFalse(original.exists())
             self.assertTrue((directory / '1_0016.mp3').is_file())
 
+    def test_review_stops_when_body_timecodes_and_mp3s_do_not_match(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            directory = Path(tmp_dir)
+            (directory / 'body.txt').write_text(
+                '0016\nFirst line\n0035\nSecond line\n',
+                encoding='utf-8',
+            )
+            (directory / '1_0016.mp3').touch()
+            (directory / '3_0100.mp3').touch()
+
+            with self.assertRaisesRegex(
+                ValueError,
+                'missing MP3.*2_0035.*extra MP3.*3_0100.mp3',
+            ):
+                review_module.prepare_narration_files(directory)
+
     def test_timestamped_mp3_filename_becomes_timeline_clip(self) -> None:
         clip = review_module.parse_narration_clip(Path('2_0118.mp3'))
 

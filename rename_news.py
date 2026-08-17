@@ -241,6 +241,29 @@ def iter_story_dirs(root: Path) -> Iterable[Path]:
             yield d
 
 
+def find_timecode_mismatches(
+    story_dir: Path,
+    blocks: list[Block],
+) -> tuple[list[str], list[str]]:
+    expected = {block.timecode for block in blocks}
+    actual = {
+        path.stem: path.name
+        for path in story_dir.glob("*.mp3")
+        if path.is_file() and TIMECODE_RE.fullmatch(path.stem)
+    }
+    missing = sorted(expected - actual.keys())
+    extra = sorted(actual[timecode] for timecode in actual.keys() - expected)
+    return missing, extra
+
+
+def warn_timecode_mismatches(story_dir: Path, blocks: list[Block]) -> None:
+    missing, extra = find_timecode_mismatches(story_dir, blocks)
+    for timecode in missing:
+        print(f"[warn] missing MP3 for timecode: {timecode}")
+    for filename in extra:
+        print(f"[warn] MP3 has no body timecode: {filename}")
+
+
 def rename_with_blocks(
     story_dir: Path,
     blocks: list[Block],
@@ -248,20 +271,24 @@ def rename_with_blocks(
     apply: bool,
     source_name: str,
 ) -> tuple[int, int]:
+    def finish(planned: int, renamed: int) -> tuple[int, int]:
+        warn_timecode_mismatches(story_dir, blocks)
+        return planned, renamed
+
     if not blocks:
         print(f"[skip] {story_dir}: no timecode blocks parsed from {source_name}")
-        return (0, 0)
+        return finish(0, 0)
 
     mp3s = sorted(story_dir.glob("*.mp3"))
     if not mp3s:
         print(f"[skip] {story_dir}: no mp3 files")
-        return (0, 0)
+        return finish(0, 0)
 
     # Only rename files that are not already in timecode format.
     todo = [p for p in mp3s if not TIMECODE_RE.match(p.stem)]
     if not todo:
         print(f"[ok] {story_dir}: all mp3 already timecoded")
-        return (0, 0)
+        return finish(0, 0)
 
     print(f"\n[story] {story_dir}")
     print(f"[source] {source_name} (timecodes source)")
@@ -307,7 +334,7 @@ def rename_with_blocks(
             src.rename(dst)
             renamed += 1
 
-    return (planned, renamed)
+    return finish(planned, renamed)
 
 
 def rename_in_story(

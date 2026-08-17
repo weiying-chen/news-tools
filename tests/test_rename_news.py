@@ -1,4 +1,6 @@
 import importlib.util
+import contextlib
+import io
 import sys
 import tempfile
 import unittest
@@ -21,6 +23,44 @@ rename_module = load_module('rename_news', RENAME_MODULE_PATH)
 
 
 class RenameNewsBlocksTest(unittest.TestCase):
+    def test_timecode_validation_finds_missing_and_extra_mp3s(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            directory = Path(tmp_dir)
+            (directory / '1_0016.mp3').touch()
+            (directory / '3_0100.mp3').touch()
+            blocks = [
+                rename_module.Block('1_0016', ['First line']),
+                rename_module.Block('2_0035', ['Second line']),
+            ]
+
+            missing, extra = rename_module.find_timecode_mismatches(directory, blocks)
+
+        self.assertEqual(missing, ['2_0035'])
+        self.assertEqual(extra, ['3_0100.mp3'])
+
+    def test_rename_warns_about_missing_and_extra_timecodes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            directory = Path(tmp_dir)
+            (directory / '1_0016.mp3').touch()
+            (directory / '3_0100.mp3').touch()
+            blocks = [
+                rename_module.Block('1_0016', ['First line']),
+                rename_module.Block('2_0035', ['Second line']),
+            ]
+            output = io.StringIO()
+
+            with contextlib.redirect_stdout(output):
+                rename_module.rename_with_blocks(
+                    story_dir=directory,
+                    blocks=blocks,
+                    min_score=0.5,
+                    apply=True,
+                    source_name='body.txt',
+                )
+
+        self.assertIn('[warn] missing MP3 for timecode: 2_0035', output.getvalue())
+        self.assertIn('[warn] MP3 has no body timecode: 3_0100.mp3', output.getvalue())
+
     def test_one_letter_tail_is_truncated_after_long_matching_prefix(self) -> None:
         filename_tokens = 'volunteers bring winter supplies across the region c'.split()
         line_tokens = (
