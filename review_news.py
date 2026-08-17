@@ -280,7 +280,10 @@ def write_chapter_file(
 def write_input_config(output: Path) -> None:
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(
-        "Ctrl+LEFT add chapter -1\nCtrl+RIGHT add chapter 1\n",
+        "LEFT seek -5 relative+exact\n"
+        "RIGHT seek 5 relative+exact\n"
+        "Ctrl+LEFT add chapter -1\n"
+        "Ctrl+RIGHT add chapter 1\n",
         encoding="utf-8",
     )
 

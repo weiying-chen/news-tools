@@ -136,7 +136,14 @@ class ReviewNewsTest(unittest.TestCase):
 
             self.assertEqual(
                 input_config.read_text(encoding='utf-8'),
-                'Ctrl+LEFT add chapter -1\nCtrl+RIGHT add chapter 1\n',
+                ''.join(
+                    [
+                        'LEFT seek -5 relative+exact\n',
+                        'RIGHT seek 5 relative+exact\n',
+                        'Ctrl+LEFT add chapter -1\n',
+                        'Ctrl+RIGHT add chapter 1\n',
+                    ]
+                ),
             )
 
     def test_unchanged_sources_reuse_cached_timeline(self) -> None:
