@@ -112,6 +112,31 @@ class SetupNewsPeopleTest(unittest.TestCase):
             ],
         )
 
+    def test_youtube_download_retries_with_combined_format(self) -> None:
+        failure = setup_module.subprocess.CalledProcessError(1, ['yt-dlp'])
+
+        with (
+            mock.patch.object(setup_module.shutil, 'which', return_value='/usr/bin/yt-dlp'),
+            mock.patch.object(
+                setup_module.subprocess,
+                'run',
+                side_effect=[failure, mock.DEFAULT],
+            ) as run,
+        ):
+            setup_module.download_youtube_video(
+                'https://www.youtube.com/watch?v=tCL86SwAlFI',
+                Path('/work/news'),
+            )
+
+        self.assertEqual(run.call_count, 2)
+        first_command = run.call_args_list[0].args[0]
+        fallback_command = run.call_args_list[1].args[0]
+        self.assertNotIn('--format', first_command)
+        self.assertEqual(
+            fallback_command[fallback_command.index('--format') + 1],
+            '18',
+        )
+
     def test_parenthesized_name_with_extra_spaces_keeps_full_name(self) -> None:
         lines = [
             '(Helena  Hung)',

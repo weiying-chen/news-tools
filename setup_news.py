@@ -272,12 +272,16 @@ def resolve_youtube_url(source_url: str, timeout: float = 30.0) -> str:
     return youtube_url
 
 
-def build_youtube_download_command(youtube_url: str, workspace: Path) -> list[str]:
+def build_youtube_download_command(
+    youtube_url: str,
+    workspace: Path,
+    format_selector: str | None = None,
+) -> list[str]:
     token_script = (
         Path.home()
         / ".local/share/bgutil-ytdlp-pot-provider/server/build/generate_once.js"
     )
-    return [
+    command = [
         "yt-dlp",
         "--no-playlist",
         "--js-runtimes",
@@ -286,19 +290,31 @@ def build_youtube_download_command(youtube_url: str, workspace: Path) -> list[st
         f"youtubepot-bgutilscript:script_path={token_script}",
         "--extractor-args",
         "youtube:player_client=mweb",
-        "--paths",
-        str(workspace),
-        youtube_url,
     ]
+    if format_selector:
+        command.extend(["--format", format_selector])
+    command.extend(["--paths", str(workspace), youtube_url])
+    return command
 
 
 def download_youtube_video(youtube_url: str, workspace: Path) -> None:
     if not shutil.which("yt-dlp"):
         raise RuntimeError("required program not found in PATH: yt-dlp")
-    subprocess.run(
-        build_youtube_download_command(youtube_url, workspace),
-        check=True,
-    )
+    try:
+        subprocess.run(
+            build_youtube_download_command(youtube_url, workspace),
+            check=True,
+        )
+    except subprocess.CalledProcessError:
+        print("[youtube] Best-quality download failed; retrying format 18")
+        subprocess.run(
+            build_youtube_download_command(
+                youtube_url,
+                workspace,
+                format_selector="18",
+            ),
+            check=True,
+        )
 
 
 def extract_english_name_hint(text: str) -> str:
