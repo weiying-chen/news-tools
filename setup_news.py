@@ -273,11 +273,19 @@ def resolve_youtube_url(source_url: str, timeout: float = 30.0) -> str:
 
 
 def build_youtube_download_command(youtube_url: str, workspace: Path) -> list[str]:
+    token_script = (
+        Path.home()
+        / ".local/share/bgutil-ytdlp-pot-provider/server/build/generate_once.js"
+    )
     return [
         "yt-dlp",
         "--no-playlist",
         "--js-runtimes",
         "node",
+        "--extractor-args",
+        f"youtubepot-bgutilscript:script_path={token_script}",
+        "--extractor-args",
+        "youtube:player_client=mweb",
         "--paths",
         str(workspace),
         youtube_url,

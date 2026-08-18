@@ -2,6 +2,7 @@ import importlib.util
 import sys
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 SETUP_MODULE_PATH = Path(__file__).resolve().parents[1] / 'setup_news.py'
@@ -84,10 +85,15 @@ class SetupNewsPeopleTest(unittest.TestCase):
         )
 
     def test_youtube_download_command_targets_workspace(self) -> None:
-        command = setup_module.build_youtube_download_command(
-            'https://www.youtube.com/watch?v=tCL86SwAlFI',
-            Path('/work/news'),
-        )
+        with mock.patch.object(
+            setup_module.Path,
+            'home',
+            return_value=Path('/home/tester'),
+        ):
+            command = setup_module.build_youtube_download_command(
+                'https://www.youtube.com/watch?v=tCL86SwAlFI',
+                Path('/work/news'),
+            )
 
         self.assertEqual(
             command,
@@ -96,6 +102,10 @@ class SetupNewsPeopleTest(unittest.TestCase):
                 '--no-playlist',
                 '--js-runtimes',
                 'node',
+                '--extractor-args',
+                'youtubepot-bgutilscript:script_path=/home/tester/.local/share/bgutil-ytdlp-pot-provider/server/build/generate_once.js',
+                '--extractor-args',
+                'youtube:player_client=mweb',
                 '--paths',
                 '/work/news',
                 'https://www.youtube.com/watch?v=tCL86SwAlFI',
