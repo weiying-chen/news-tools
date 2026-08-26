@@ -6,6 +6,7 @@ import re
 import shutil
 import subprocess
 import sys
+import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -320,7 +321,8 @@ def download_youtube_video(youtube_url: str, workspace: Path) -> None:
 def extract_english_name_hint(text: str) -> str:
     def finalize_name(name: str) -> str:
         cleaned = (
-            name.replace("“", '"')
+            unicodedata.normalize("NFKC", name)
+            .replace("“", '"')
             .replace("”", '"')
             .replace("‘", "'")
             .replace("’", "'")
@@ -328,7 +330,7 @@ def extract_english_name_hint(text: str) -> str:
         )
         return cleaned if looks_like_english_name(cleaned) else ""
 
-    stripped = text.strip()
+    stripped = unicodedata.normalize("NFKC", text).strip()
     if not stripped:
         return ""
 
@@ -377,7 +379,7 @@ def extract_english_name_hint(text: str) -> str:
 
 
 def looks_like_english_name(text: str) -> bool:
-    candidate = text.strip()
+    candidate = unicodedata.normalize("NFKC", text).strip()
     if not candidate:
         return False
     if " of " in candidate.lower() and ROLE_PHRASE_RE.search(candidate):

@@ -238,6 +238,24 @@ class SetupNewsPeopleTest(unittest.TestCase):
         )
         self.assertEqual(setup_module.render_body_txt(lines), "\n".join(lines) + "\n")
 
+    def test_fullwidth_latin_initial_in_cue_is_normalized(self) -> None:
+        lines = [
+            '(SB Ｍidori)(7秒)',
+            '/*SUPER:',
+            '捐血民眾｜米多里//',
+            '*/',
+        ]
+
+        self.assertEqual(
+            setup_module.detect_people_entries(lines),
+            [
+                {
+                    'label': '捐血民眾｜米多里',
+                    'name_en': 'Midori',
+                }
+            ],
+        )
+
     def test_cue_extracts_name_before_english_role_title(self) -> None:
         lines = [
             '(SB  Freeman Su Executive Director of NE Region )(7秒)',
