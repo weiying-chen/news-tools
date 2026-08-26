@@ -6,6 +6,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import unicodedata
 import urllib.error
 import urllib.parse
@@ -277,6 +278,7 @@ def build_youtube_download_command(
     youtube_url: str,
     workspace: Path,
     format_selector: str | None = None,
+    temp_directory: Path | None = None,
 ) -> list[str]:
     token_script = (
         Path.home()
@@ -294,28 +296,42 @@ def build_youtube_download_command(
     ]
     if format_selector:
         command.extend(["--format", format_selector])
-    command.extend(["--paths", str(workspace), youtube_url])
+    command.extend(["--paths", str(workspace)])
+    if temp_directory is not None:
+        command.extend(["--paths", f"temp:{temp_directory}"])
+    command.append(youtube_url)
     return command
 
 
 def download_youtube_video(youtube_url: str, workspace: Path) -> None:
     if not shutil.which("yt-dlp"):
         raise RuntimeError("required program not found in PATH: yt-dlp")
+    temp_directory = Path(
+        tempfile.mkdtemp(prefix=".setup-news-download-", dir=workspace)
+    )
     try:
-        subprocess.run(
-            build_youtube_download_command(youtube_url, workspace),
-            check=True,
-        )
-    except subprocess.CalledProcessError:
-        print("[youtube] Best-quality download failed; retrying format 18")
-        subprocess.run(
-            build_youtube_download_command(
-                youtube_url,
-                workspace,
-                format_selector="18",
-            ),
-            check=True,
-        )
+        try:
+            subprocess.run(
+                build_youtube_download_command(
+                    youtube_url,
+                    workspace,
+                    temp_directory=temp_directory,
+                ),
+                check=True,
+            )
+        except subprocess.CalledProcessError:
+            print("[youtube] Best-quality download failed; retrying format 18")
+            subprocess.run(
+                build_youtube_download_command(
+                    youtube_url,
+                    workspace,
+                    format_selector="18",
+                    temp_directory=temp_directory,
+                ),
+                check=True,
+            )
+    finally:
+        shutil.rmtree(temp_directory, ignore_errors=True)
 
 
 def extract_english_name_hint(text: str) -> str:
