@@ -12,9 +12,5 @@ dependencies = [
   "faster-whisper>=1.2,<2",
 ]
 
-[project.scripts]
-timestamp-vo = "timestamp_vo:main"
-
 [tool.setuptools]
 py-modules = ["timestamp_vo"]
-

@@ -3,10 +3,8 @@
 
 from __future__ import annotations
 
-import argparse
 import math
 import re
-import sys
 import unicodedata
 from dataclasses import dataclass
 from difflib import SequenceMatcher
@@ -129,7 +127,6 @@ def align_vo_passages(
 
     return matches
 
-
 def _format_timecode(seconds: float) -> str:
     rounded_up = math.ceil(seconds)
     minutes, remaining_seconds = divmod(rounded_up, 60)
@@ -176,79 +173,25 @@ def transcribe(video: Path, model_name: str) -> list[TranscriptSegment]:
     ]
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(
-        description="Add missing VO timecodes to a copy of a news body file."
-    )
-    parser.add_argument("body", type=Path, help="News body.txt to parse")
-    parser.add_argument("video", type=Path, help="Downloaded news video or audio")
-    parser.add_argument(
-        "--output",
-        type=Path,
-        default=None,
-        help="Output path (default: body_timestamped_sample.txt beside the body)",
-    )
-    parser.add_argument("--model", default="small", help="Whisper model (default: small)")
-    parser.add_argument(
-        "--regenerate",
-        action="store_true",
-        help="Remove existing timecodes from the output copy and regenerate all of them",
-    )
-    parser.add_argument(
-        "--min-score",
-        type=float,
-        default=0.45,
-        help="Minimum accepted fuzzy alignment score (default: 0.45)",
-    )
-    args = parser.parse_args()
-
-    body_path = args.body.expanduser().resolve()
-    video_path = args.video.expanduser().resolve()
-    output_path = (
-        args.output.expanduser().resolve()
-        if args.output
-        else body_path.with_name("body_timestamped_sample.txt")
-    )
-    if not body_path.is_file():
-        print(f"[error] body not found: {body_path}", file=sys.stderr)
-        return 2
-    if not video_path.is_file():
-        print(f"[error] video not found: {video_path}", file=sys.stderr)
-        return 2
-    if output_path == body_path:
-        print("[error] output must not overwrite the source body", file=sys.stderr)
-        return 2
-
-    source_body = body_path.read_text(encoding="utf-8")
-    body = remove_existing_timecodes(source_body) if args.regenerate else source_body
+def timestamp_body(
+    body_path: Path,
+    video_path: Path,
+    *,
+    model_name: str = "small",
+    min_score: float = 0.45,
+) -> list[VoMatch]:
+    """Add missing VO timecodes to body_path after validating every alignment."""
+    body = body_path.read_text(encoding="utf-8")
     passages = extract_vo_passages(body)
     if not passages:
-        print("[error] no VO passages detected", file=sys.stderr)
-        return 1
+        raise ValueError("no VO passages detected")
 
-    try:
-        segments = transcribe(video_path, args.model)
-        matches = align_vo_passages(passages, segments)
-    except (RuntimeError, ValueError) as error:
-        print(f"[error] {error}", file=sys.stderr)
-        return 1
-
-    weak = [match for match in matches if match.score < args.min_score]
-    for match in matches:
-        detected = _format_timecode(match.start_seconds)
-        status = f"keep {match.passage.timecode}" if match.passage.timecode else f"add {detected}"
-        print(f"[{status}] score={match.score:.3f} {match.passage.text[:60]}")
+    matches = align_vo_passages(passages, transcribe(video_path, model_name))
+    weak = [match for match in matches if match.score < min_score]
     if weak:
-        print(
-            f"[error] {len(weak)} VO alignment(s) below --min-score; output not written",
-            file=sys.stderr,
+        raise ValueError(
+            f"{len(weak)} VO alignment(s) below minimum score; body not changed"
         )
-        return 1
 
-    output_path.write_text(render_timestamped_body(body, matches), encoding="utf-8")
-    print(f"[created] {output_path}")
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
+    body_path.write_text(render_timestamped_body(body, matches), encoding="utf-8")
+    return matches

@@ -15,6 +15,8 @@ import zipfile
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
+import timestamp_vo
+
 W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 NS = {"w": W_NS}
 R_NS = "http://schemas.openxmlformats.org/package/2006/relationships"
@@ -303,7 +305,28 @@ def build_youtube_download_command(
     return command
 
 
-def download_youtube_video(youtube_url: str, workspace: Path) -> None:
+def youtube_video_id(youtube_url: str) -> str:
+    parsed = urllib.parse.urlparse(youtube_url)
+    if parsed.hostname == "youtu.be":
+        return parsed.path.strip("/")
+    return urllib.parse.parse_qs(parsed.query).get("v", [""])[0]
+
+
+def find_downloaded_youtube_video(workspace: Path, youtube_url: str) -> Path:
+    video_id = youtube_video_id(youtube_url)
+    candidates = sorted(
+        path
+        for path in workspace.iterdir()
+        if path.is_file()
+        and f"[{video_id}]" in path.name
+        and path.suffix.lower() in {".mkv", ".mov", ".mp4", ".webm"}
+    )
+    if not candidates:
+        raise RuntimeError(f"downloaded YouTube video not found for ID: {video_id}")
+    return candidates[-1]
+
+
+def download_youtube_video(youtube_url: str, workspace: Path) -> Path:
     if not shutil.which("yt-dlp"):
         raise RuntimeError("required program not found in PATH: yt-dlp")
     temp_directory = Path(
@@ -332,6 +355,17 @@ def download_youtube_video(youtube_url: str, workspace: Path) -> None:
             )
     finally:
         shutil.rmtree(temp_directory, ignore_errors=True)
+    return find_downloaded_youtube_video(workspace, youtube_url)
+
+
+def download_and_timestamp_video(
+    youtube_url: str,
+    workspace: Path,
+    body_path: Path,
+) -> Path:
+    video_path = download_youtube_video(youtube_url, workspace)
+    timestamp_vo.timestamp_body(body_path, video_path)
+    return video_path
 
 
 def extract_english_name_hint(text: str) -> str:
@@ -664,11 +698,16 @@ def run(args: argparse.Namespace) -> int:
 
         if youtube_url:
             try:
-                download_youtube_video(youtube_url, workspace)
-            except (RuntimeError, subprocess.CalledProcessError) as error:
-                print(f"[error] YouTube download failed: {error}", file=sys.stderr)
+                video_path = download_and_timestamp_video(
+                    youtube_url,
+                    workspace,
+                    body_txt,
+                )
+            except (RuntimeError, ValueError, subprocess.CalledProcessError) as error:
+                print(f"[error] video preparation failed: {error}", file=sys.stderr)
                 return 1
             print(f"[downloaded] {youtube_url}")
+            print(f"[timestamped] {body_txt.name} using {video_path.name}")
     return 0
 
 

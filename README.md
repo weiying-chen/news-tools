@@ -17,16 +17,9 @@ Faster-Whisper is installed inside `.venv`. Downloaded Whisper models remain in
 the shared Hugging Face cache, so other projects do not need duplicate model
 copies.
 
-## VO timestamps
-
-Detect VO passages, align them directly against a downloaded video, and write a
-timestamped copy without changing the source body:
-
-```bash
-.venv/bin/timestamp-vo ~/text/news/body.txt ~/text/news/video.mp4
-```
-
-The default output is `body_timestamped_sample.txt` beside the source body.
+`setup-news` automatically detects VO passages, aligns them against the
+downloaded video, and adds their timestamps to `body.txt` after all alignments
+pass validation.
 
 ## Reference generator
 

@@ -1,6 +1,8 @@
 import importlib.util
 import sys
+import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 
@@ -86,6 +88,22 @@ class TimestampVoTest(unittest.TestCase):
         untimed = timestamp_vo.remove_existing_timecodes(body)
 
         self.assertEqual(untimed, "第一段旁白。\n\n第二段旁白。\n")
+
+    def test_timestamp_body_updates_source_after_all_matches_pass(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            body_path = Path(tmp_dir) / "body.txt"
+            video_path = Path(tmp_dir) / "video.mp4"
+            body_path.write_text("第一段旁白。\nFirst narration.\n", encoding="utf-8")
+            video_path.touch()
+            segments = [timestamp_vo.TranscriptSegment(17.2, 21.0, "第一段旁白。")]
+
+            with mock.patch.object(timestamp_vo, "transcribe", return_value=segments):
+                timestamp_vo.timestamp_body(body_path, video_path)
+
+            self.assertEqual(
+                body_path.read_text(encoding="utf-8"),
+                "0018\n第一段旁白。\nFirst narration.\n",
+            )
 
 
 if __name__ == "__main__":

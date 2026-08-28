@@ -124,6 +124,11 @@ class SetupNewsPeopleTest(unittest.TestCase):
             ),
             mock.patch.object(setup_module.shutil, 'rmtree'),
             mock.patch.object(
+                setup_module,
+                'find_downloaded_youtube_video',
+                return_value=Path('/work/news/video.mp4'),
+            ),
+            mock.patch.object(
                 setup_module.subprocess,
                 'run',
                 side_effect=[failure, mock.DEFAULT],
@@ -167,6 +172,34 @@ class SetupNewsPeopleTest(unittest.TestCase):
             Path('/work/news/.setup-news-download-123'),
             ignore_errors=True,
         )
+
+    def test_downloaded_video_automatically_timestamps_body(self) -> None:
+        workspace = Path('/work/news')
+        body = workspace / 'body.txt'
+        video = workspace / 'story.mp4'
+
+        with (
+            mock.patch.object(
+                setup_module,
+                'download_youtube_video',
+                return_value=video,
+            ) as download,
+            mock.patch.object(
+                setup_module.timestamp_vo,
+                'timestamp_body',
+            ) as timestamp,
+        ):
+            setup_module.download_and_timestamp_video(
+                'https://www.youtube.com/watch?v=tCL86SwAlFI',
+                workspace,
+                body,
+            )
+
+        download.assert_called_once_with(
+            'https://www.youtube.com/watch?v=tCL86SwAlFI',
+            workspace,
+        )
+        timestamp.assert_called_once_with(body, video)
 
     def test_parenthesized_name_with_extra_spaces_keeps_full_name(self) -> None:
         lines = [
