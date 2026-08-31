@@ -532,8 +532,15 @@ def play_video(
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
-    finally:
         return_code = player.wait()
+    except KeyboardInterrupt:
+        player.terminate()
+        try:
+            player.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            player.kill()
+            player.wait()
+        raise
     if return_code:
         raise subprocess.CalledProcessError(return_code, command)
 
@@ -615,6 +622,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             chapters=chapters,
             input_config=input_config,
         )
+    except KeyboardInterrupt:
+        print("[stopped] review closed", file=sys.stderr)
+        return 130
     except (OSError, RuntimeError, ValueError, subprocess.CalledProcessError) as error:
         print(f"[error] {error}", file=sys.stderr)
         return 1

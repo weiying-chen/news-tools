@@ -294,6 +294,40 @@ class ReviewNewsTest(unittest.TestCase):
         self.assertEqual(run.call_args.kwargs['stdout'], review_module.subprocess.DEVNULL)
         self.assertEqual(run.call_args.kwargs['stderr'], review_module.subprocess.DEVNULL)
 
+    def test_ctrl_c_terminates_the_wsl_player_it_launched(self) -> None:
+        player = mock.Mock()
+        player.wait.side_effect = [KeyboardInterrupt, 0]
+        with (
+            mock.patch.object(review_module, 'running_in_wsl', return_value=True),
+            mock.patch.object(review_module, 'find_windows_mpv', return_value='mpv.exe'),
+            mock.patch.object(review_module, 'to_windows_path', side_effect=lambda path: str(path)),
+            mock.patch.object(review_module.shutil, 'which', return_value='powershell.exe'),
+            mock.patch.object(review_module.subprocess, 'Popen', return_value=player),
+            mock.patch.object(review_module.subprocess, 'run'),
+        ):
+            with self.assertRaises(KeyboardInterrupt):
+                review_module.play_video(
+                    mpv='mpv',
+                    video=Path('/story/video.webm'),
+                    timeline=Path('/cache/english.m4a'),
+                    chapters=Path('/cache/chapters.ffmetadata'),
+                    input_config=Path('/cache/input.conf'),
+                )
+
+        player.terminate.assert_called_once_with()
+        self.assertEqual(player.wait.call_args_list, [mock.call(), mock.call(timeout=5)])
+
+    def test_ctrl_c_exits_review_quietly_with_status_130(self) -> None:
+        error = io.StringIO()
+        with (
+            mock.patch.object(review_module, 'prepare_narration_files', side_effect=KeyboardInterrupt),
+            contextlib.redirect_stderr(error),
+        ):
+            result = review_module.main([])
+
+        self.assertEqual(result, 130)
+        self.assertEqual(error.getvalue(), '[stopped] review closed\n')
+
     def test_cache_uses_fast_lossless_mixed_audio(self) -> None:
         output, manifest = review_module.cache_paths(
             Path('/story'),
