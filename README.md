@@ -17,7 +17,7 @@ Faster-Whisper is installed inside `.venv`. Downloaded Whisper models remain in
 the shared Hugging Face cache, so other projects do not need duplicate model
 copies.
 
-`setup-news` automatically detects VO passages, aligns them against the
+The installed `.venv/bin/setup-news` command automatically detects VO passages, aligns them against the
 downloaded video, and adds their timestamps to `body.txt` after all alignments
 pass validation.
 

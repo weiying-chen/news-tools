@@ -7,11 +7,15 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class ProjectMetadataTest(unittest.TestCase):
-    def test_timestamp_module_declares_its_runtime_dependency(self) -> None:
+    def test_setup_command_uses_project_runtime_dependency(self) -> None:
         metadata = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
 
         self.assertIn("faster-whisper>=1.2,<2", metadata["project"]["dependencies"])
-        self.assertNotIn("scripts", metadata["project"])
+        self.assertEqual(
+            metadata["project"]["scripts"]["setup-news"],
+            "setup_news:main",
+        )
+        self.assertIn("setup_news", metadata["tool"]["setuptools"]["py-modules"])
         self.assertIn("timestamp_vo", metadata["tool"]["setuptools"]["py-modules"])
 
 
