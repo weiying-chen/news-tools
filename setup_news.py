@@ -480,6 +480,16 @@ def looks_like_named_super_label(text: str) -> bool:
     return bool(role and name and ("｜" in label or "|" in label))
 
 
+def normalize_voice_only_super_header(text: str) -> str:
+    stripped = text.strip()
+    if not stripped.endswith("//"):
+        return text
+    fields = [field.strip() for field in re.split(r"\s{2,}", stripped[:-2])]
+    if len(fields) != 3 or fields[0] != "聲音" or not all(fields):
+        return text
+    return "｜".join(fields) + "//"
+
+
 def detect_people_entries(lines: list[str]) -> list[dict[str, str]]:
     seen: set[str] = set()
     entries: list[dict[str, str]] = []
@@ -488,7 +498,7 @@ def detect_people_entries(lines: list[str]) -> list[dict[str, str]]:
     consumed_super_header = False
 
     for idx, line in enumerate(lines):
-        s = line.strip()
+        s = normalize_voice_only_super_header(line).strip()
         if not s:
             continue
 
@@ -567,7 +577,7 @@ def find_super_labels_missing_english_names(lines: list[str]) -> list[str]:
 def render_body_txt(lines: list[str]) -> str:
     if not lines:
         return ""
-    return "\n".join(lines) + "\n"
+    return "\n".join(normalize_voice_only_super_header(line) for line in lines) + "\n"
 
 
 def render_meta_txt(lines: list[str]) -> str:

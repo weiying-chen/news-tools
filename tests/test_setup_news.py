@@ -389,6 +389,23 @@ class SetupNewsPeopleTest(unittest.TestCase):
             ),
         )
 
+    def test_voice_only_super_header_keeps_three_explicit_fields(self) -> None:
+        lines = [
+            '/*SUPER:',
+            '聲音  慈濟雪隆分會副執行長  蘇祈逢//',
+            '因為他的這屍體 是往下沖的//',
+            '*/',
+        ]
+
+        self.assertIn(
+            '聲音｜慈濟雪隆分會副執行長｜蘇祈逢//',
+            setup_module.render_body_txt(lines).splitlines(),
+        )
+        self.assertIn(
+            '聲音｜慈濟雪隆分會副執行長｜蘇祈逢',
+            setup_module.render_meta_txt(lines).splitlines(),
+        )
+
 
 if __name__ == '__main__':
     unittest.main()
