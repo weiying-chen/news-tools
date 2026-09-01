@@ -73,14 +73,18 @@ class TimestampVoTest(unittest.TestCase):
 
         self.assertEqual([match.start_seconds for match in matches], [17.2, 75.3])
 
-    def test_inserts_ceil_second_timecode_without_overwriting_source(self) -> None:
+    def test_inserts_nearest_second_timecode_without_overwriting_source(self) -> None:
         body = "第一段旁白。\nFirst narration.\n"
         passage = timestamp_vo.VoPassage(0, "第一段旁白。", None)
-        match = timestamp_vo.VoMatch(passage, 75.3, 0.95)
+        match = timestamp_vo.VoMatch(passage, 20.08, 0.95)
 
         rendered = timestamp_vo.render_timestamped_body(body, [match])
 
-        self.assertEqual(rendered, "0116\n第一段旁白。\nFirst narration.\n")
+        self.assertEqual(rendered, "0020\n第一段旁白。\nFirst narration.\n")
+
+    def test_nearest_second_rounds_half_up(self) -> None:
+        self.assertEqual(timestamp_vo._format_timecode(44.49), "0044")
+        self.assertEqual(timestamp_vo._format_timecode(44.50), "0045")
 
     def test_removes_existing_timecodes_for_live_regeneration(self) -> None:
         body = "0018\n第一段旁白。\n\n0043\n第二段旁白。\n"
@@ -102,7 +106,7 @@ class TimestampVoTest(unittest.TestCase):
 
             self.assertEqual(
                 body_path.read_text(encoding="utf-8"),
-                "0018\n第一段旁白。\nFirst narration.\n",
+                "0017\n第一段旁白。\nFirst narration.\n",
             )
 
 
