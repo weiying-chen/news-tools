@@ -62,6 +62,19 @@ class SetupNewsPeopleTest(unittest.TestCase):
             ['慈濟志工｜陳大明'],
         )
 
+    def test_anonymous_super_role_does_not_require_english_name(self) -> None:
+        lines = [
+            '/*SUPER:',
+            '家長//',
+            '感謝大家的幫助//',
+            '*/',
+        ]
+
+        self.assertEqual(
+            setup_module.find_super_labels_missing_english_names(lines),
+            [],
+        )
+
     def test_daai_html_youtube_id_becomes_canonical_watch_url(self) -> None:
         html = r'''
             var newsJson = '{\"NewsID\":111111,\"YTID\":\"Rhs8Q5uRQsA\"}';

@@ -570,7 +570,7 @@ def find_super_labels_missing_english_names(lines: list[str]) -> list[str]:
     return [
         entry["label"]
         for entry in detect_people_entries(lines)
-        if not entry["name_en"]
+        if not entry["name_en"] and bool(split_label_name(entry["label"])[1])
     ]
 
 
