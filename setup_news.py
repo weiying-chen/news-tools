@@ -397,6 +397,8 @@ def extract_english_name_hint(text: str) -> str:
             candidate = extract_name_from_cue_segment(chunk.strip())
             if candidate.isupper() and len(candidate) <= 3:
                 continue
+            if ORG_HINT_RE.search(candidate):
+                continue
             if looks_like_english_name(candidate):
                 return finalize_name(candidate)
 
@@ -406,6 +408,8 @@ def extract_english_name_hint(text: str) -> str:
         for chunk in chunks:
             candidate = extract_name_from_cue_segment(chunk.strip())
             if candidate.isupper() and len(candidate) <= 3:
+                continue
+            if ORG_HINT_RE.search(candidate):
                 continue
             if looks_like_english_name(candidate):
                 return finalize_name(candidate)

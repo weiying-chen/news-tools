@@ -333,6 +333,24 @@ class SetupNewsPeopleTest(unittest.TestCase):
             ],
         )
 
+    def test_parenthesized_organization_before_person_name_is_skipped(self) -> None:
+        lines = [
+            '(17) (Shree Bageshwori Secondary School)( GYANU THAPA)',
+            '/*SUPER:',
+            '巴格斯瓦里中學校長｜賈努塔帕//',
+            '*/',
+        ]
+
+        self.assertEqual(
+            setup_module.detect_people_entries(lines),
+            [
+                {
+                    'label': '巴格斯瓦里中學校長｜賈努塔帕',
+                    'name_en': 'GYANU THAPA',
+                }
+            ],
+        )
+
     def test_cue_extracts_name_before_english_role_title(self) -> None:
         lines = [
             '(SB  Freeman Su Executive Director of NE Region )(7秒)',
