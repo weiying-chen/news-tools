@@ -24,10 +24,19 @@ class VoPassage:
 
 
 @dataclass(frozen=True)
+class TranscriptWord:
+    start: float
+    end: float
+    text: str
+    probability: float
+
+
+@dataclass(frozen=True)
 class TranscriptSegment:
     start: float
     end: float
     text: str
+    words: tuple[TranscriptWord, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -96,11 +105,20 @@ def _window_score(source: str, candidate: str) -> float:
     return similarity * (0.75 + 0.25 * length_ratio)
 
 
+def _refined_segment_start(segment: TranscriptSegment) -> float:
+    if not segment.words or segment.words[0].probability >= 0.2:
+        return segment.start
+    for word in segment.words[1:]:
+        if word.probability >= 0.5:
+            return word.start
+    return segment.start
+
+
 def align_vo_passages(
     passages: Sequence[VoPassage],
     segments: Sequence[TranscriptSegment],
     *,
-    max_window_segments: int = 12,
+    max_window_segments: int | None = None,
 ) -> list[VoMatch]:
     """Fuzzily match known VO text to ordered Whisper transcript windows."""
     matches: list[VoMatch] = []
@@ -111,7 +129,12 @@ def align_vo_passages(
         best: tuple[float, int, int] | None = None
         for start in range(search_from, len(segments)):
             combined = ""
-            for end in range(start, min(len(segments), start + max_window_segments)):
+            end_limit = (
+                len(segments)
+                if max_window_segments is None
+                else min(len(segments), start + max_window_segments)
+            )
+            for end in range(start, end_limit):
                 combined += _normalize_for_alignment(segments[end].text)
                 score = _window_score(source, combined)
                 if best is None or score > best[0]:
@@ -122,14 +145,14 @@ def align_vo_passages(
         if best is None:
             raise ValueError(f"no transcript remains for VO: {passage.text[:40]}")
         score, start, end = best
-        matches.append(VoMatch(passage, segments[start].start, score))
-        search_from = end + 1
+        matches.append(VoMatch(passage, _refined_segment_start(segments[start]), score))
+        search_from = start + 1
 
     return matches
 
 def _format_timecode(seconds: float) -> str:
-    rounded = math.floor(seconds + 0.5)
-    minutes, remaining_seconds = divmod(rounded, 60)
+    containing_second = math.floor(seconds)
+    minutes, remaining_seconds = divmod(containing_second, 60)
     return f"{minutes:02d}{remaining_seconds:02d}"
 
 
@@ -168,7 +191,15 @@ def transcribe(video: Path, model_name: str) -> list[TranscriptSegment]:
         word_timestamps=True,
     )
     return [
-        TranscriptSegment(segment.start, segment.end, segment.text)
+        TranscriptSegment(
+            segment.start,
+            segment.end,
+            segment.text,
+            words=tuple(
+                TranscriptWord(word.start, word.end, word.word, word.probability)
+                for word in (segment.words or ())
+            ),
+        )
         for segment in raw_segments
     ]
 

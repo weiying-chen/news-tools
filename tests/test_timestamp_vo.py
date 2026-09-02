@@ -73,7 +73,70 @@ class TimestampVoTest(unittest.TestCase):
 
         self.assertEqual([match.start_seconds for match in matches], [17.2, 75.3])
 
-    def test_inserts_nearest_second_timecode_without_overwriting_source(self) -> None:
+    def test_long_vo_alignment_includes_more_than_twelve_segments(self) -> None:
+        opening = ["a", "b", "c"]
+        remainder = [f"longsegment{index}" for index in range(12)]
+        passage = timestamp_vo.VoPassage(0, "".join(opening + remainder), None)
+        segments = [
+            timestamp_vo.TranscriptSegment(float(index), float(index + 1), text)
+            for index, text in enumerate(opening + remainder)
+        ]
+
+        match = timestamp_vo.align_vo_passages([passage], segments)[0]
+
+        self.assertEqual(match.start_seconds, 0.0)
+        self.assertEqual(match.score, 1.0)
+
+    def test_reliable_opening_word_keeps_segment_onset(self) -> None:
+        passage = timestamp_vo.VoPassage(0, "這所學校", None)
+        segment = timestamp_vo.TranscriptSegment(
+            98.55,
+            99.53,
+            "這所學校",
+            words=(
+                timestamp_vo.TranscriptWord(98.55, 98.99, "這", 0.932),
+                timestamp_vo.TranscriptWord(98.99, 99.15, "所", 0.999),
+            ),
+        )
+
+        match = timestamp_vo.align_vo_passages([passage], [segment])[0]
+
+        self.assertEqual(match.start_seconds, 98.55)
+        self.assertEqual(timestamp_vo._format_timecode(match.start_seconds), "0138")
+
+    def test_unreliable_opening_word_uses_first_reliable_word(self) -> None:
+        passage = timestamp_vo.VoPassage(0, "表哥的鼓勵", None)
+        segment = timestamp_vo.TranscriptSegment(
+            70.62,
+            71.90,
+            "表哥的鼓勵",
+            words=(
+                timestamp_vo.TranscriptWord(70.62, 71.32, "表", 0.003),
+                timestamp_vo.TranscriptWord(71.32, 71.60, "哥", 0.988),
+                timestamp_vo.TranscriptWord(71.60, 71.72, "的", 0.981),
+            ),
+        )
+
+        match = timestamp_vo.align_vo_passages([passage], [segment])[0]
+
+        self.assertEqual(match.start_seconds, 71.32)
+        self.assertEqual(timestamp_vo._format_timecode(match.start_seconds), "0111")
+
+    def test_prior_window_cannot_hide_next_passage_start(self) -> None:
+        passages = [
+            timestamp_vo.VoPassage(0, "firstsecond", None),
+            timestamp_vo.VoPassage(1, "second", None),
+        ]
+        segments = [
+            timestamp_vo.TranscriptSegment(10.0, 11.0, "first"),
+            timestamp_vo.TranscriptSegment(20.0, 21.0, "second"),
+        ]
+
+        matches = timestamp_vo.align_vo_passages(passages, segments)
+
+        self.assertEqual([match.start_seconds for match in matches], [10.0, 20.0])
+
+    def test_inserts_containing_second_timecode_without_overwriting_source(self) -> None:
         body = "第一段旁白。\nFirst narration.\n"
         passage = timestamp_vo.VoPassage(0, "第一段旁白。", None)
         match = timestamp_vo.VoMatch(passage, 20.08, 0.95)
@@ -82,9 +145,9 @@ class TimestampVoTest(unittest.TestCase):
 
         self.assertEqual(rendered, "0020\n第一段旁白。\nFirst narration.\n")
 
-    def test_nearest_second_rounds_half_up(self) -> None:
-        self.assertEqual(timestamp_vo._format_timecode(44.49), "0044")
-        self.assertEqual(timestamp_vo._format_timecode(44.50), "0045")
+    def test_timestamp_uses_second_containing_the_detected_onset(self) -> None:
+        self.assertEqual(timestamp_vo._format_timecode(98.00), "0138")
+        self.assertEqual(timestamp_vo._format_timecode(98.99), "0138")
 
     def test_removes_existing_timecodes_for_live_regeneration(self) -> None:
         body = "0018\n第一段旁白。\n\n0043\n第二段旁白。\n"
