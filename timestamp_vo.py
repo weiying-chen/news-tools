@@ -114,6 +114,51 @@ def _refined_segment_start(segment: TranscriptSegment) -> float:
     return segment.start
 
 
+def _refined_match_start(
+    segments: Sequence[TranscriptSegment],
+    start: int,
+    end: int,
+    source: str,
+) -> float:
+    """Locate the passage onset within a matched transcript window."""
+    normalized_words: list[str] = []
+    word_starts: list[float] = []
+    for segment in segments[start : end + 1]:
+        for word in segment.words:
+            normalized = _normalize_for_alignment(word.text)
+            for char in normalized:
+                normalized_words.append(char)
+                word_starts.append(word.start)
+
+    candidate = "".join(normalized_words)
+    if not candidate:
+        return _refined_segment_start(segments[start])
+
+    exact_start = candidate.find(source)
+    if exact_start >= 0:
+        if exact_start == 0:
+            return _refined_segment_start(segments[start])
+        return word_starts[exact_start]
+
+    # Whisper can substitute a few characters. Use a matching block near the
+    # source opening, while rejecting coincidental single-character matches.
+    opening_limit = max(2, len(source) // 10)
+    minimum_block = 2 if len(source) >= 4 else 1
+    blocks = SequenceMatcher(None, source, candidate).get_matching_blocks()
+    opening_blocks = [
+        block
+        for block in blocks
+        if block.size >= minimum_block and block.a <= opening_limit
+    ]
+    if opening_blocks:
+        block = min(opening_blocks, key=lambda item: (item.a, item.b))
+        if block.b == 0:
+            return _refined_segment_start(segments[start])
+        return word_starts[block.b]
+
+    return _refined_segment_start(segments[start])
+
+
 def align_vo_passages(
     passages: Sequence[VoPassage],
     segments: Sequence[TranscriptSegment],
@@ -145,14 +190,16 @@ def align_vo_passages(
         if best is None:
             raise ValueError(f"no transcript remains for VO: {passage.text[:40]}")
         score, start, end = best
-        matches.append(VoMatch(passage, _refined_segment_start(segments[start]), score))
+        matches.append(
+            VoMatch(passage, _refined_match_start(segments, start, end, source), score)
+        )
         search_from = start + 1
 
     return matches
 
 def _format_timecode(seconds: float) -> str:
-    containing_second = math.floor(seconds)
-    minutes, remaining_seconds = divmod(containing_second, 60)
+    nearest_second = math.floor(seconds + 0.5)
+    minutes, remaining_seconds = divmod(nearest_second, 60)
     return f"{minutes:02d}{remaining_seconds:02d}"
 
 
