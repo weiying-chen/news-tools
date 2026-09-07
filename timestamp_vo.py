@@ -105,8 +105,13 @@ def _window_score(source: str, candidate: str) -> float:
     return similarity * (0.75 + 0.25 * length_ratio)
 
 
-def _refined_segment_start(segment: TranscriptSegment) -> float:
+def _refined_segment_start(
+    segment: TranscriptSegment,
+    previous_segment: TranscriptSegment | None = None,
+) -> float:
     if not segment.words or segment.words[0].probability >= 0.2:
+        return segment.start
+    if previous_segment is None or abs(segment.start - previous_segment.end) > 0.2:
         return segment.start
     for word in segment.words[1:]:
         if word.probability >= 0.5:
@@ -121,6 +126,10 @@ def _refined_match_start(
     source: str,
 ) -> float:
     """Locate the passage onset within a matched transcript window."""
+    previous_segment = segments[start - 1] if start > 0 else None
+    if previous_segment is not None and segments[start].start - previous_segment.end > 0.2:
+        return segments[start].start
+
     normalized_words: list[str] = []
     word_starts: list[float] = []
     for segment in segments[start : end + 1]:
@@ -132,12 +141,12 @@ def _refined_match_start(
 
     candidate = "".join(normalized_words)
     if not candidate:
-        return _refined_segment_start(segments[start])
+        return _refined_segment_start(segments[start], previous_segment)
 
     exact_start = candidate.find(source)
     if exact_start >= 0:
         if exact_start == 0:
-            return _refined_segment_start(segments[start])
+            return _refined_segment_start(segments[start], previous_segment)
         return word_starts[exact_start]
 
     # Whisper can substitute a few characters. Use a matching block near the
@@ -153,10 +162,10 @@ def _refined_match_start(
     if opening_blocks:
         block = min(opening_blocks, key=lambda item: (item.a, item.b))
         if block.b == 0:
-            return _refined_segment_start(segments[start])
+            return _refined_segment_start(segments[start], previous_segment)
         return word_starts[block.b]
 
-    return _refined_segment_start(segments[start])
+    return _refined_segment_start(segments[start], previous_segment)
 
 
 def align_vo_passages(

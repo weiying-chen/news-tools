@@ -106,21 +106,44 @@ class TimestampVoTest(unittest.TestCase):
 
     def test_unreliable_opening_word_uses_first_reliable_word(self) -> None:
         passage = timestamp_vo.VoPassage(0, "表哥的鼓勵", None)
-        segment = timestamp_vo.TranscriptSegment(
-            70.62,
-            71.90,
-            "表哥的鼓勵",
-            words=(
-                timestamp_vo.TranscriptWord(70.62, 71.32, "表", 0.003),
-                timestamp_vo.TranscriptWord(71.32, 71.60, "哥", 0.988),
-                timestamp_vo.TranscriptWord(71.60, 71.72, "的", 0.981),
+        segments = [
+            timestamp_vo.TranscriptSegment(69.96, 70.62, "previous speech"),
+            timestamp_vo.TranscriptSegment(
+                70.62,
+                71.90,
+                "表哥的鼓勵",
+                words=(
+                    timestamp_vo.TranscriptWord(70.62, 71.32, "表", 0.003),
+                    timestamp_vo.TranscriptWord(71.32, 71.60, "哥", 0.988),
+                    timestamp_vo.TranscriptWord(71.60, 71.72, "的", 0.981),
+                ),
             ),
-        )
+        ]
 
-        match = timestamp_vo.align_vo_passages([passage], [segment])[0]
+        match = timestamp_vo.align_vo_passages([passage], segments)[0]
 
         self.assertEqual(match.start_seconds, 71.32)
         self.assertEqual(timestamp_vo._format_timecode(match.start_seconds), "0111")
+
+    def test_unreliable_opening_after_silence_keeps_detected_onset(self) -> None:
+        passage = timestamp_vo.VoPassage(0, "這間我們希望基金會", None)
+        segments = [
+            timestamp_vo.TranscriptSegment(21.98, 23.68, "previous speech"),
+            timestamp_vo.TranscriptSegment(
+                26.10,
+                27.76,
+                "之間我們希望基金會",
+                words=(
+                    timestamp_vo.TranscriptWord(26.10, 26.50, "之", 0.176),
+                    timestamp_vo.TranscriptWord(26.50, 26.66, "間", 0.991),
+                ),
+            ),
+        ]
+
+        match = timestamp_vo.align_vo_passages([passage], segments)[0]
+
+        self.assertEqual(match.start_seconds, 26.10)
+        self.assertEqual(timestamp_vo._format_timecode(match.start_seconds), "0026")
 
     def test_uses_passage_onset_inside_matched_segment(self) -> None:
         passage = timestamp_vo.VoPassage(0, "除了軍警人員還有十多位社區婦女", None)
