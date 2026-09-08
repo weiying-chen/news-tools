@@ -224,6 +224,16 @@ def find_first_url_in_lines(lines: list[str]) -> str:
     return ""
 
 
+def warn_if_source_url_missing(source_url: str) -> bool:
+    if source_url:
+        return False
+    print(
+        "[warn] source URL not found; video download and VO timestamping skipped",
+        file=sys.stderr,
+    )
+    return True
+
+
 def copy_to_clipboard(text: str, copy_cmd: str = "wl-copy") -> bool:
     try:
         subprocess.run([copy_cmd], input=(text + "\n").encode("utf-8"), check=True)
@@ -696,6 +706,7 @@ def run(args: argparse.Namespace) -> int:
     print(f"[created] {meta_txt.name}")
     for label in find_super_labels_missing_english_names(lines):
         print(f"[warn] SUPER missing English name: {label}", file=sys.stderr)
+    warn_if_source_url_missing(first_url)
 
     if first_url:
         try:

@@ -1,4 +1,6 @@
 import importlib.util
+import contextlib
+import io
 import sys
 import unittest
 from pathlib import Path
@@ -21,6 +23,18 @@ setup_module = load_module('setup_news', SETUP_MODULE_PATH)
 
 
 class SetupNewsPeopleTest(unittest.TestCase):
+    def test_missing_source_url_warns_that_video_steps_are_skipped(self) -> None:
+        error = io.StringIO()
+
+        with contextlib.redirect_stderr(error):
+            warned = setup_module.warn_if_source_url_missing("")
+
+        self.assertTrue(warned)
+        self.assertEqual(
+            error.getvalue(),
+            "[warn] source URL not found; video download and VO timestamping skipped\n",
+        )
+
     def test_multiple_named_labels_in_one_super_block_are_included(self) -> None:
         lines = [
             '/*SUPER:',
