@@ -145,6 +145,28 @@ class TimestampVoTest(unittest.TestCase):
         self.assertEqual(match.start_seconds, 26.10)
         self.assertEqual(timestamp_vo._format_timecode(match.start_seconds), "0026")
 
+    def test_sung_false_opening_before_long_gap_uses_reliable_word(self) -> None:
+        passage = timestamp_vo.VoPassage(0, "一到十年級", None)
+        segments = [
+            timestamp_vo.TranscriptSegment(130.0, 134.5, "song"),
+            timestamp_vo.TranscriptSegment(
+                135.82,
+                141.48,
+                "一到十年級",
+                words=(
+                    timestamp_vo.TranscriptWord(135.82, 136.26, "一", 0.017),
+                    timestamp_vo.TranscriptWord(140.32, 140.76, "到", 0.968),
+                    timestamp_vo.TranscriptWord(140.76, 141.02, "十", 0.990),
+                    timestamp_vo.TranscriptWord(141.02, 141.16, "年", 0.995),
+                    timestamp_vo.TranscriptWord(141.16, 141.48, "級", 0.988),
+                ),
+            ),
+        ]
+
+        match = timestamp_vo.align_vo_passages([passage], segments)[0]
+
+        self.assertEqual(match.start_seconds, 140.32)
+
     def test_uses_passage_onset_inside_matched_segment(self) -> None:
         passage = timestamp_vo.VoPassage(0, "除了軍警人員還有十多位社區婦女", None)
         segment = timestamp_vo.TranscriptSegment(

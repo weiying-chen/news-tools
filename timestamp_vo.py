@@ -141,6 +141,16 @@ def _refined_match_start(
     source: str,
 ) -> float:
     """Locate the passage onset within a matched transcript window."""
+    first_segment = segments[start]
+    if first_segment.words and first_segment.words[0].probability < 0.2:
+        first_word = first_segment.words[0]
+        reliable_word = next(
+            (word for word in first_segment.words[1:] if word.probability >= 0.5),
+            None,
+        )
+        if reliable_word is not None and reliable_word.start - first_word.end >= 2.0:
+            return reliable_word.start
+
     previous_segment = segments[start - 1] if start > 0 else None
     if previous_segment is not None and segments[start].start - previous_segment.end > 0.2:
         return segments[start].start
