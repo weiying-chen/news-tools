@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import math
 import re
+import sys
 import unicodedata
 from dataclasses import dataclass
 from difflib import SequenceMatcher
@@ -44,6 +45,20 @@ class VoMatch:
     passage: VoPassage
     start_seconds: float
     score: float
+    end_seconds: float | None = None
+
+
+@dataclass(frozen=True)
+class SuperBlock:
+    start_line_index: int
+    end_line_index: int
+    has_duration: bool
+
+
+@dataclass(frozen=True)
+class SuperDuration:
+    line_index: int
+    seconds: int
 
 
 def _is_chinese_source(line: str) -> bool:
@@ -200,7 +215,12 @@ def align_vo_passages(
             raise ValueError(f"no transcript remains for VO: {passage.text[:40]}")
         score, start, end = best
         matches.append(
-            VoMatch(passage, _refined_match_start(segments, start, end, source), score)
+            VoMatch(
+                passage,
+                _refined_match_start(segments, start, end, source),
+                score,
+                end_seconds=segments[end].end,
+            )
         )
         search_from = start + 1
 
@@ -212,17 +232,153 @@ def _format_timecode(seconds: float) -> str:
     return f"{minutes:02d}{remaining_seconds:02d}"
 
 
-def render_timestamped_body(body: str, matches: Sequence[VoMatch]) -> str:
+def _duration_from_cue(line: str) -> int | None:
+    stripped = line.strip()
+    if re.fullmatch(r"\d{1,2}", stripped):
+        return int(stripped)
+    explicit_seconds = re.findall(
+        r"[（(][^（）()]*?(\d{1,3})\s*秒[^（）()]*[）)]",
+        stripped,
+    )
+    if explicit_seconds:
+        return int(explicit_seconds[-1])
+    bare_parenthesized = re.findall(r"[（(]\s*(\d{1,2})\s*[）)]", stripped)
+    return int(bare_parenthesized[-1]) if bare_parenthesized else None
+
+
+def extract_super_blocks(body: str) -> list[SuperBlock]:
+    lines = body.splitlines()
+    blocks: list[SuperBlock] = []
+    index = 0
+    while index < len(lines):
+        if lines[index].strip() != "/*SUPER:":
+            index += 1
+            continue
+        end = index + 1
+        while end < len(lines) and "*/" not in lines[end]:
+            end += 1
+        if end >= len(lines):
+            break
+
+        previous = index - 1
+        while previous >= 0 and not lines[previous].strip():
+            previous -= 1
+        following_has_duration = False
+        following = end + 1
+        while following < len(lines):
+            following_line = lines[following].strip()
+            if TIMECODE_RE.fullmatch(following_line) or following_line.startswith("/*"):
+                break
+            if _duration_from_cue(following_line) is not None:
+                following_has_duration = True
+                break
+            following += 1
+        has_duration = (
+            previous >= 0 and _duration_from_cue(lines[previous]) is not None
+        ) or following_has_duration
+        blocks.append(SuperBlock(index, end, has_duration))
+        index = end + 1
+    return blocks
+
+
+def infer_missing_super_durations(
+    body: str,
+    matches: Sequence[VoMatch],
+    segments: Sequence[TranscriptSegment],
+) -> tuple[list[SuperDuration], list[str]]:
+    blocks = extract_super_blocks(body)
+    ordered_matches = sorted(matches, key=lambda match: match.passage.line_index)
+    grouped: dict[tuple[int, int], list[SuperBlock]] = {}
+    unbounded: list[SuperBlock] = []
+
+    for block in blocks:
+        if block.has_duration:
+            continue
+        previous = [
+            match
+            for match in ordered_matches
+            if match.passage.line_index < block.start_line_index
+            and match.end_seconds is not None
+        ]
+        following = [
+            match
+            for match in ordered_matches
+            if match.passage.line_index > block.end_line_index
+        ]
+        if not previous or not following:
+            unbounded.append(block)
+            continue
+        previous_match = previous[-1]
+        following_match = following[0]
+        key = (
+            ordered_matches.index(previous_match),
+            ordered_matches.index(following_match),
+        )
+        grouped.setdefault(key, []).append(block)
+
+    durations: list[SuperDuration] = []
+    warnings = [
+        f"SUPER ending on line {block.end_line_index + 1} has no surrounding VO anchors"
+        for block in unbounded
+    ]
+    all_blocks = extract_super_blocks(body)
+    for (previous_index, following_index), missing_blocks in grouped.items():
+        previous_match = ordered_matches[previous_index]
+        following_match = ordered_matches[following_index]
+        blocks_between = [
+            block
+            for block in all_blocks
+            if previous_match.passage.line_index < block.start_line_index
+            and block.end_line_index < following_match.passage.line_index
+        ]
+        if len(blocks_between) != 1 or len(missing_blocks) != 1:
+            warnings.extend(
+                f"SUPER ending on line {block.end_line_index + 1} shares an ambiguous VO gap"
+                for block in missing_blocks
+            )
+            continue
+
+        lower = previous_match.end_seconds
+        assert lower is not None
+        upper = following_match.start_seconds
+        speech = [
+            segment
+            for segment in segments
+            if segment.start >= lower - 0.2 and segment.end <= upper + 0.2
+        ]
+        if not speech:
+            block = missing_blocks[0]
+            warnings.append(
+                f"SUPER ending on line {block.end_line_index + 1} has no clear speech interval"
+            )
+            continue
+        seconds = max(1, math.floor((speech[-1].end - speech[0].start) + 0.5))
+        durations.append(SuperDuration(missing_blocks[0].end_line_index, seconds))
+
+    return durations, warnings
+
+
+def render_timestamped_body(
+    body: str,
+    matches: Sequence[VoMatch],
+    *,
+    super_durations: Sequence[SuperDuration] = (),
+) -> str:
     insertions = {
         match.passage.line_index: _format_timecode(match.start_seconds)
         for match in matches
         if match.passage.timecode is None
     }
     output: list[str] = []
+    durations_by_line = {
+        duration.line_index: str(duration.seconds) for duration in super_durations
+    }
     for index, line in enumerate(body.splitlines()):
         if index in insertions:
             output.append(insertions[index])
         output.append(line)
+        if index in durations_by_line:
+            output.append(durations_by_line[index])
     rendered = "\n".join(output)
     if body.endswith("\n"):
         rendered += "\n"
@@ -273,12 +429,19 @@ def timestamp_body(
     if not passages:
         raise ValueError("no VO passages detected")
 
-    matches = align_vo_passages(passages, transcribe(video_path, model_name))
+    segments = transcribe(video_path, model_name)
+    matches = align_vo_passages(passages, segments)
     weak = [match for match in matches if match.score < min_score]
     if weak:
         raise ValueError(
             f"{len(weak)} VO alignment(s) below minimum score; body not changed"
         )
 
-    body_path.write_text(render_timestamped_body(body, matches), encoding="utf-8")
+    super_durations, warnings = infer_missing_super_durations(body, matches, segments)
+    for warning in warnings:
+        print(f"[warn] {warning}", file=sys.stderr)
+    body_path.write_text(
+        render_timestamped_body(body, matches, super_durations=super_durations),
+        encoding="utf-8",
+    )
     return matches

@@ -218,6 +218,171 @@ class TimestampVoTest(unittest.TestCase):
                 "0017\n第一段旁白。\nFirst narration.\n",
             )
 
+    def test_adds_missing_single_super_duration_between_vo_passages(self) -> None:
+        body = "\n".join(
+            [
+                "0010",
+                "第一段旁白。",
+                "",
+                "/*SUPER:",
+                "記者｜林國新//",
+                "訪問內容//",
+                "*/",
+                "",
+                "0025",
+                "第二段旁白。",
+                "",
+            ]
+        )
+        passages = timestamp_vo.extract_vo_passages(body)
+        matches = [
+            timestamp_vo.VoMatch(passages[0], 10.0, 0.9, end_seconds=15.0),
+            timestamp_vo.VoMatch(passages[1], 25.0, 0.9, end_seconds=30.0),
+        ]
+        segments = [
+            timestamp_vo.TranscriptSegment(10.0, 15.0, "第一段旁白"),
+            timestamp_vo.TranscriptSegment(16.0, 23.0, "interview"),
+            timestamp_vo.TranscriptSegment(25.0, 30.0, "第二段旁白"),
+        ]
+
+        durations, warnings = timestamp_vo.infer_missing_super_durations(
+            body,
+            matches,
+            segments,
+        )
+        rendered = timestamp_vo.render_timestamped_body(
+            body,
+            matches,
+            super_durations=durations,
+        )
+
+        self.assertEqual(warnings, [])
+        self.assertEqual([(item.line_index, item.seconds) for item in durations], [(6, 7)])
+        self.assertIn("\n*/\n7\n", rendered)
+
+    def test_preserves_super_with_duration_in_preceding_cue(self) -> None:
+        body = "\n".join(
+            [
+                "0010",
+                "第一段旁白。",
+                "",
+                "(SB Reporter)(17秒)",
+                "/*SUPER:",
+                "記者｜林國新//",
+                "*/",
+                "",
+                "0025",
+                "第二段旁白。",
+            ]
+        )
+        passages = timestamp_vo.extract_vo_passages(body)
+        matches = [
+            timestamp_vo.VoMatch(passages[0], 10.0, 0.9, end_seconds=15.0),
+            timestamp_vo.VoMatch(passages[1], 25.0, 0.9, end_seconds=30.0),
+        ]
+
+        durations, warnings = timestamp_vo.infer_missing_super_durations(
+            body,
+            matches,
+            [],
+        )
+
+        self.assertEqual(durations, [])
+        self.assertEqual(warnings, [])
+
+    def test_preserves_super_duration_after_interview_translation(self) -> None:
+        body = "\n".join(
+            [
+                "0010",
+                "第一段旁白。",
+                "",
+                "/*SUPER:",
+                "記者｜林國新//",
+                "訪問內容//",
+                "*/",
+                "Interview translation.",
+                "continues here.",
+                "17",
+                "",
+                "0025",
+                "第二段旁白。",
+            ]
+        )
+        passages = timestamp_vo.extract_vo_passages(body)
+        matches = [
+            timestamp_vo.VoMatch(passages[0], 10.0, 0.9, end_seconds=15.0),
+            timestamp_vo.VoMatch(passages[1], 25.0, 0.9, end_seconds=30.0),
+        ]
+
+        durations, warnings = timestamp_vo.infer_missing_super_durations(
+            body,
+            matches,
+            [timestamp_vo.TranscriptSegment(16.0, 23.0, "interview")],
+        )
+
+        self.assertEqual(durations, [])
+        self.assertEqual(warnings, [])
+
+    def test_preserves_super_duration_in_named_preceding_cue(self) -> None:
+        body = "\n".join(
+            [
+                "0010",
+                "第一段旁白。",
+                "",
+                "(25秒，Dipak Kumar Karki)",
+                "/*SUPER:",
+                "里長｜狄帕克//",
+                "*/",
+                "",
+                "0025",
+                "第二段旁白。",
+            ]
+        )
+        passages = timestamp_vo.extract_vo_passages(body)
+        matches = [
+            timestamp_vo.VoMatch(passages[0], 10.0, 0.9, end_seconds=15.0),
+            timestamp_vo.VoMatch(passages[1], 25.0, 0.9, end_seconds=30.0),
+        ]
+
+        durations, warnings = timestamp_vo.infer_missing_super_durations(
+            body,
+            matches,
+            [timestamp_vo.TranscriptSegment(16.0, 23.0, "interview")],
+        )
+
+        self.assertEqual(durations, [])
+        self.assertEqual(warnings, [])
+
+    def test_multiple_supers_between_vo_passages_are_left_unchanged(self) -> None:
+        body = "\n".join(
+            [
+                "0010",
+                "第一段旁白。",
+                "/*SUPER:",
+                "第一位//",
+                "*/",
+                "/*SUPER:",
+                "第二位//",
+                "*/",
+                "0025",
+                "第二段旁白。",
+            ]
+        )
+        passages = timestamp_vo.extract_vo_passages(body)
+        matches = [
+            timestamp_vo.VoMatch(passages[0], 10.0, 0.9, end_seconds=15.0),
+            timestamp_vo.VoMatch(passages[1], 25.0, 0.9, end_seconds=30.0),
+        ]
+
+        durations, warnings = timestamp_vo.infer_missing_super_durations(
+            body,
+            matches,
+            [timestamp_vo.TranscriptSegment(16.0, 23.0, "interviews")],
+        )
+
+        self.assertEqual(durations, [])
+        self.assertEqual(len(warnings), 2)
+
 
 if __name__ == "__main__":
     unittest.main()
