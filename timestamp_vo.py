@@ -298,7 +298,7 @@ def infer_missing_super_durations(
 ) -> tuple[list[SuperDuration], list[str]]:
     blocks = extract_super_blocks(body)
     ordered_matches = sorted(matches, key=lambda match: match.passage.line_index)
-    grouped: dict[tuple[int, int], list[SuperBlock]] = {}
+    grouped: dict[tuple[int | None, int], list[SuperBlock]] = {}
     unbounded: list[SuperBlock] = []
 
     for block in blocks:
@@ -315,11 +315,15 @@ def infer_missing_super_durations(
             for match in ordered_matches
             if match.passage.line_index > block.end_line_index
         ]
-        if not previous or not following:
+        if not following:
             unbounded.append(block)
             continue
-        previous_match = previous[-1]
         following_match = following[0]
+        if not previous:
+            key = (None, ordered_matches.index(following_match))
+            grouped.setdefault(key, []).append(block)
+            continue
+        previous_match = previous[-1]
         key = (
             ordered_matches.index(previous_match),
             ordered_matches.index(following_match),
@@ -333,14 +337,21 @@ def infer_missing_super_durations(
     ]
     all_blocks = extract_super_blocks(body)
     for (previous_index, following_index), missing_blocks in grouped.items():
-        previous_match = ordered_matches[previous_index]
         following_match = ordered_matches[following_index]
-        blocks_between = [
-            block
-            for block in all_blocks
-            if previous_match.passage.line_index < block.start_line_index
-            and block.end_line_index < following_match.passage.line_index
-        ]
+        if previous_index is None:
+            blocks_between = [
+                block
+                for block in all_blocks
+                if block.end_line_index < following_match.passage.line_index
+            ]
+        else:
+            previous_match = ordered_matches[previous_index]
+            blocks_between = [
+                block
+                for block in all_blocks
+                if previous_match.passage.line_index < block.start_line_index
+                and block.end_line_index < following_match.passage.line_index
+            ]
         if len(blocks_between) != 1 or len(missing_blocks) != 1:
             warnings.extend(
                 f"SUPER ending on line {block.end_line_index + 1} shares an ambiguous VO gap"
@@ -348,14 +359,17 @@ def infer_missing_super_durations(
             )
             continue
 
-        lower = previous_match.end_seconds
-        assert lower is not None
         upper = following_match.start_seconds
-        speech = [
-            segment
-            for segment in segments
-            if segment.start >= lower - 0.2 and segment.end <= upper + 0.2
-        ]
+        if previous_index is None:
+            speech = [segment for segment in segments if segment.end <= upper + 0.2]
+        else:
+            lower = previous_match.end_seconds
+            assert lower is not None
+            speech = [
+                segment
+                for segment in segments
+                if segment.start >= lower - 0.2 and segment.end <= upper + 0.2
+            ]
         if not speech:
             block = missing_blocks[0]
             warnings.append(

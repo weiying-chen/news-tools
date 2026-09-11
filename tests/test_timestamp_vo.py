@@ -282,6 +282,36 @@ class TimestampVoTest(unittest.TestCase):
         self.assertEqual([(item.line_index, item.seconds) for item in durations], [(6, 7)])
         self.assertIn("\n*/\n7\n", rendered)
 
+    def test_adds_missing_super_duration_before_first_vo(self) -> None:
+        body = "\n".join(
+            [
+                "/*SUPER:",
+                "記者｜林國新//",
+                "現場報導//",
+                "*/",
+                "",
+                "0139",
+                "第一段旁白。",
+            ]
+        )
+        passages = timestamp_vo.extract_vo_passages(body)
+        matches = [
+            timestamp_vo.VoMatch(passages[0], 99.0, 0.9, end_seconds=105.0),
+        ]
+        segments = [
+            timestamp_vo.TranscriptSegment(81.0, 99.0, "現場報導"),
+            timestamp_vo.TranscriptSegment(99.0, 105.0, "第一段旁白"),
+        ]
+
+        durations, warnings = timestamp_vo.infer_missing_super_durations(
+            body,
+            matches,
+            segments,
+        )
+
+        self.assertEqual(warnings, [])
+        self.assertEqual([(item.line_index, item.seconds) for item in durations], [(3, 18)])
+
     def test_preserves_super_with_duration_in_preceding_cue(self) -> None:
         body = "\n".join(
             [
