@@ -52,7 +52,11 @@ class VoMatch:
 class SuperBlock:
     start_line_index: int
     end_line_index: int
-    has_duration: bool
+    duration_seconds: int | None
+
+    @property
+    def has_duration(self) -> bool:
+        return self.duration_seconds is not None
 
 
 @dataclass(frozen=True)
@@ -273,20 +277,28 @@ def extract_super_blocks(body: str) -> list[SuperBlock]:
         previous = index - 1
         while previous >= 0 and not lines[previous].strip():
             previous -= 1
-        following_has_duration = False
+        following_duration: int | None = None
         following = end + 1
         while following < len(lines):
             following_line = lines[following].strip()
             if TIMECODE_RE.fullmatch(following_line) or following_line.startswith("/*"):
                 break
-            if _duration_from_cue(following_line) is not None:
-                following_has_duration = True
+            if re.fullmatch(r"\d{1,2}", following_line):
+                following_duration = int(following_line)
                 break
             following += 1
-        has_duration = (
-            previous >= 0 and _duration_from_cue(lines[previous]) is not None
-        ) or following_has_duration
-        blocks.append(SuperBlock(index, end, has_duration))
+        preceding_duration = (
+            _duration_from_cue(lines[previous]) if previous >= 0 else None
+        )
+        blocks.append(
+            SuperBlock(
+                index,
+                end,
+                preceding_duration
+                if preceding_duration is not None
+                else following_duration,
+            )
+        )
         index = end + 1
     return blocks
 
@@ -352,7 +364,10 @@ def infer_missing_super_durations(
                 if previous_match.passage.line_index < block.start_line_index
                 and block.end_line_index < following_match.passage.line_index
             ]
-        if len(blocks_between) != 1 or len(missing_blocks) != 1:
+        if len(missing_blocks) != 1 or any(
+            block.duration_seconds is None and block not in missing_blocks
+            for block in blocks_between
+        ):
             warnings.extend(
                 f"SUPER ending on line {block.end_line_index + 1} shares an ambiguous VO gap"
                 for block in missing_blocks
@@ -376,7 +391,17 @@ def infer_missing_super_durations(
                 f"SUPER ending on line {block.end_line_index + 1} has no clear speech interval"
             )
             continue
-        seconds = max(1, math.floor((speech[-1].end - speech[0].start) + 0.5))
+        known_seconds = sum(
+            block.duration_seconds or 0 for block in blocks_between
+        )
+        remaining_seconds = speech[-1].end - speech[0].start - known_seconds
+        if remaining_seconds <= 0:
+            block = missing_blocks[0]
+            warnings.append(
+                f"SUPER ending on line {block.end_line_index + 1} has no remaining speech time"
+            )
+            continue
+        seconds = max(1, math.floor(remaining_seconds + 0.5))
         durations.append(SuperDuration(missing_blocks[0].end_line_index, seconds))
 
     return durations, warnings

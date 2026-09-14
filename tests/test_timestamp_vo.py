@@ -435,6 +435,42 @@ class TimestampVoTest(unittest.TestCase):
         self.assertEqual(durations, [])
         self.assertEqual(len(warnings), 2)
 
+    def test_infers_one_missing_duration_beside_known_super(self) -> None:
+        body = "\n".join(
+            [
+                "0010",
+                "第一段旁白。",
+                "(4秒)",
+                "/*SUPER:",
+                "第一位//",
+                "*/",
+                "(Second Person)",
+                "/*SUPER:",
+                "第二位//",
+                "*/",
+                "0030",
+                "第二段旁白。",
+            ]
+        )
+        passages = timestamp_vo.extract_vo_passages(body)
+        matches = [
+            timestamp_vo.VoMatch(passages[0], 10.0, 0.9, end_seconds=15.0),
+            timestamp_vo.VoMatch(passages[1], 30.0, 0.9, end_seconds=35.0),
+        ]
+        segments = [
+            timestamp_vo.TranscriptSegment(16.0, 20.0, "first interview"),
+            timestamp_vo.TranscriptSegment(21.0, 27.0, "second interview"),
+        ]
+
+        durations, warnings = timestamp_vo.infer_missing_super_durations(
+            body,
+            matches,
+            segments,
+        )
+
+        self.assertEqual(warnings, [])
+        self.assertEqual([(item.line_index, item.seconds) for item in durations], [(9, 7)])
+
 
 if __name__ == "__main__":
     unittest.main()
