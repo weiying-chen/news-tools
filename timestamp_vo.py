@@ -241,8 +241,8 @@ def align_vo_passages(
     return matches
 
 def _format_timecode(seconds: float) -> str:
-    nearest_second = math.floor(seconds + 0.5)
-    minutes, remaining_seconds = divmod(nearest_second, 60)
+    next_second = math.ceil(seconds)
+    minutes, remaining_seconds = divmod(next_second, 60)
     return f"{minutes:02d}{remaining_seconds:02d}"
 
 
