@@ -436,9 +436,27 @@ def render_timestamped_body(
     return rendered
 
 
-def transcribe(video: Path, model_name: str) -> list[TranscriptSegment]:
+def _merge_clip_ranges(
+    ranges: Sequence[tuple[float, float]],
+) -> list[tuple[float, float]]:
+    merged: list[tuple[float, float]] = []
+    for start, end in sorted(ranges):
+        if merged and start <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], end))
+        else:
+            merged.append((start, end))
+    return merged
+
+
+def transcribe(
+    video: Path,
+    model_name: str,
+    *,
+    clip_ranges: Sequence[tuple[float, float]] | None = None,
+) -> list[TranscriptSegment]:
     try:
         from faster_whisper import WhisperModel
+        from faster_whisper.audio import decode_audio
     except ImportError as error:
         raise RuntimeError(
             "faster-whisper is not installed for this Python interpreter; "
@@ -446,25 +464,90 @@ def transcribe(video: Path, model_name: str) -> list[TranscriptSegment]:
         ) from error
 
     model = WhisperModel(model_name, device="cpu", compute_type="int8")
-    raw_segments, _ = model.transcribe(
-        str(video),
-        language="zh",
-        beam_size=1,
-        vad_filter=True,
-        word_timestamps=True,
-    )
-    return [
-        TranscriptSegment(
-            segment.start,
-            segment.end,
-            segment.text,
-            words=tuple(
-                TranscriptWord(word.start, word.end, word.word, word.probability)
-                for word in (segment.words or ())
-            ),
+    audio_inputs: list[tuple[object, float]] = [(str(video), 0.0)]
+    if clip_ranges:
+        sampling_rate = 16000
+        audio = decode_audio(str(video), sampling_rate=sampling_rate)
+        audio_inputs = [
+            (
+                audio[
+                    max(0, round(start * sampling_rate)) : round(end * sampling_rate)
+                ],
+                start,
+            )
+            for start, end in clip_ranges
+        ]
+
+    segments: list[TranscriptSegment] = []
+    for audio_input, offset in audio_inputs:
+        raw_segments, _ = model.transcribe(
+            audio_input,
+            language="zh",
+            beam_size=1,
+            vad_filter=True,
+            word_timestamps=True,
         )
-        for segment in raw_segments
-    ]
+        segments.extend(
+            TranscriptSegment(
+                segment.start + offset,
+                segment.end + offset,
+                segment.text,
+                words=tuple(
+                    TranscriptWord(
+                        word.start + offset,
+                        word.end + offset,
+                        word.word,
+                        word.probability,
+                    )
+                    for word in (segment.words or ())
+                ),
+            )
+            for segment in raw_segments
+        )
+    return segments
+
+
+def verify_suspicious_vo_matches(
+    video_path: Path,
+    matches: Sequence[VoMatch],
+    *,
+    fallback_model_name: str = "medium",
+    suspicious_score: float = 0.8,
+    minimum_improvement: float = 0.05,
+) -> list[VoMatch]:
+    suspicious = [match for match in matches if match.score < suspicious_score]
+    if not suspicious:
+        return list(matches)
+
+    ranges_by_line = {
+        match.passage.line_index: (
+            max(0.0, match.start_seconds - 8.0),
+            (match.end_seconds or match.start_seconds) + 3.0,
+        )
+        for match in suspicious
+    }
+    clip_ranges = _merge_clip_ranges(list(ranges_by_line.values()))
+    fallback_segments = transcribe(
+        video_path,
+        fallback_model_name,
+        clip_ranges=clip_ranges,
+    )
+
+    replacements: dict[int, VoMatch] = {}
+    for original in suspicious:
+        clip_start, clip_end = ranges_by_line[original.passage.line_index]
+        local_segments = [
+            segment
+            for segment in fallback_segments
+            if segment.end >= clip_start and segment.start <= clip_end
+        ]
+        if not local_segments:
+            continue
+        candidate = align_vo_passages([original.passage], local_segments)[0]
+        if candidate.score >= original.score + minimum_improvement:
+            replacements[original.passage.line_index] = candidate
+
+    return [replacements.get(match.passage.line_index, match) for match in matches]
 
 
 def timestamp_body(
@@ -482,6 +565,8 @@ def timestamp_body(
 
     segments = transcribe(video_path, model_name)
     matches = align_vo_passages(passages, segments)
+    if model_name == "small":
+        matches = verify_suspicious_vo_matches(video_path, matches)
     weak = [match for match in matches if match.score < min_score]
     if weak:
         raise ValueError(

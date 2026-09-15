@@ -19,7 +19,9 @@ copies.
 
 The installed `.venv/bin/setup-news` command automatically detects VO passages, aligns them against the
 downloaded video, and adds their timestamps to `body.txt` after all alignments
-pass validation. The same Faster-Whisper transcript is reused to add a missing
+pass validation. Low-confidence VO matches are rechecked in short audio windows
+with the medium Faster-Whisper model, and are replaced only when the alignment
+materially improves. The same Faster-Whisper transcript is reused to add a missing
 duration below a SUPER block when exactly one interview occurs between two VO
 passages. Existing cue durations are preserved, and ambiguous intervals are
 left unchanged with a warning.

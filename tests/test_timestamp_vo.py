@@ -235,12 +235,57 @@ class TimestampVoTest(unittest.TestCase):
             video_path.touch()
             segments = [timestamp_vo.TranscriptSegment(17.2, 21.0, "第一段旁白。")]
 
-            with mock.patch.object(timestamp_vo, "transcribe", return_value=segments):
+            with mock.patch.object(
+                timestamp_vo,
+                "transcribe",
+                return_value=segments,
+            ) as transcribe:
                 timestamp_vo.timestamp_body(body_path, video_path)
 
             self.assertEqual(
                 body_path.read_text(encoding="utf-8"),
                 "0017\n第一段旁白。\nFirst narration.\n",
+            )
+            transcribe.assert_called_once_with(video_path, "small")
+
+    def test_timestamp_body_rechecks_suspicious_match_with_medium(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            body_path = Path(tmp_dir) / "body.txt"
+            video_path = Path(tmp_dir) / "video.mp4"
+            body_path.write_text(
+                "人有無限可能。愛的種子一旦種下，終有一日開枝散葉。\n",
+                encoding="utf-8",
+            )
+            video_path.touch()
+            small_segments = [
+                timestamp_vo.TranscriptSegment(
+                    54.46,
+                    57.36,
+                    "一旦種下終有一日開枝散葉",
+                )
+            ]
+            medium_segments = [
+                timestamp_vo.TranscriptSegment(
+                    51.98,
+                    57.68,
+                    "人有無限可能愛的種子一旦種下終有一日開枝散葉",
+                )
+            ]
+
+            with mock.patch.object(
+                timestamp_vo,
+                "transcribe",
+                side_effect=[small_segments, medium_segments],
+            ) as transcribe:
+                matches = timestamp_vo.timestamp_body(body_path, video_path)
+
+            self.assertEqual(matches[0].start_seconds, 51.98)
+            self.assertTrue(body_path.read_text(encoding="utf-8").startswith("0052\n"))
+            self.assertEqual(transcribe.call_count, 2)
+            self.assertEqual(transcribe.call_args_list[1].args[:2], (video_path, "medium"))
+            self.assertEqual(
+                transcribe.call_args_list[1].kwargs,
+                {"clip_ranges": [(46.46, 60.36)]},
             )
 
     def test_adds_missing_single_super_duration_between_vo_passages(self) -> None:
