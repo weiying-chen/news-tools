@@ -102,7 +102,7 @@ class TimestampVoTest(unittest.TestCase):
         match = timestamp_vo.align_vo_passages([passage], [segment])[0]
 
         self.assertEqual(match.start_seconds, 98.55)
-        self.assertEqual(timestamp_vo._format_timecode(match.start_seconds), "0139")
+        self.assertEqual(timestamp_vo._format_timecode(match.start_seconds), "0138")
 
     def test_unreliable_opening_word_uses_first_reliable_word(self) -> None:
         passage = timestamp_vo.VoPassage(0, "表哥的鼓勵", None)
@@ -123,7 +123,7 @@ class TimestampVoTest(unittest.TestCase):
         match = timestamp_vo.align_vo_passages([passage], segments)[0]
 
         self.assertEqual(match.start_seconds, 71.32)
-        self.assertEqual(timestamp_vo._format_timecode(match.start_seconds), "0112")
+        self.assertEqual(timestamp_vo._format_timecode(match.start_seconds), "0111")
 
     def test_unreliable_opening_after_silence_keeps_detected_onset(self) -> None:
         passage = timestamp_vo.VoPassage(0, "這間我們希望基金會", None)
@@ -210,14 +210,15 @@ class TimestampVoTest(unittest.TestCase):
 
         self.assertEqual(rendered, "0020\n第一段旁白。\nFirst narration.\n")
 
-    def test_timestamp_allows_small_lead_before_rounding_upward(self) -> None:
+    def test_timestamp_uses_second_containing_detected_onset(self) -> None:
+        self.assertEqual(timestamp_vo._format_timecode(14.30), "0014")
         self.assertEqual(timestamp_vo._format_timecode(98.00), "0138")
         self.assertEqual(timestamp_vo._format_timecode(98.01), "0138")
         self.assertEqual(timestamp_vo._format_timecode(98.20), "0138")
-        self.assertEqual(timestamp_vo._format_timecode(98.21), "0139")
-        self.assertEqual(timestamp_vo._format_timecode(98.49), "0139")
-        self.assertEqual(timestamp_vo._format_timecode(98.50), "0139")
-        self.assertEqual(timestamp_vo._format_timecode(98.99), "0139")
+        self.assertEqual(timestamp_vo._format_timecode(98.21), "0138")
+        self.assertEqual(timestamp_vo._format_timecode(98.49), "0138")
+        self.assertEqual(timestamp_vo._format_timecode(98.50), "0138")
+        self.assertEqual(timestamp_vo._format_timecode(98.99), "0138")
         self.assertEqual(timestamp_vo._format_timecode(59.01), "0059")
 
     def test_removes_existing_timecodes_for_live_regeneration(self) -> None:
@@ -280,7 +281,7 @@ class TimestampVoTest(unittest.TestCase):
                 matches = timestamp_vo.timestamp_body(body_path, video_path)
 
             self.assertEqual(matches[0].start_seconds, 51.98)
-            self.assertTrue(body_path.read_text(encoding="utf-8").startswith("0052\n"))
+            self.assertTrue(body_path.read_text(encoding="utf-8").startswith("0051\n"))
             self.assertEqual(transcribe.call_count, 2)
             self.assertEqual(transcribe.call_args_list[1].args[:2], (video_path, "medium"))
             self.assertEqual(
