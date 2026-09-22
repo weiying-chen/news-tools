@@ -46,6 +46,7 @@ class VoMatch:
     start_seconds: float
     score: float
     end_seconds: float | None = None
+    timing_anomaly: bool = False
 
 
 @dataclass(frozen=True)
@@ -93,6 +94,8 @@ def extract_vo_passages(body: str) -> list[VoPassage]:
             continue
         if line == "~" or line.startswith("(") or line.endswith("*/"):
             continue
+        if "#大愛新聞" in line:
+            continue
         if not _is_chinese_source(line):
             continue
 
@@ -122,6 +125,27 @@ def _window_score(source: str, candidate: str) -> float:
     similarity = SequenceMatcher(None, source, candidate).ratio()
     length_ratio = min(len(source), len(candidate)) / max(len(source), len(candidate))
     return similarity * (0.75 + 0.25 * length_ratio)
+
+
+def _fuzzy_opening_offset(source: str, candidate: str) -> int | None:
+    """Find the strongest approximate occurrence of the scripted opening."""
+    prefix_length = min(12, max(4, math.ceil(len(source) / 2)))
+    prefix = source[:prefix_length]
+    minimum_length = max(2, prefix_length - 2)
+    best: tuple[float, int] | None = None
+    for offset in range(len(candidate)):
+        maximum_length = min(prefix_length + 2, len(candidate) - offset)
+        for length in range(minimum_length, maximum_length + 1):
+            score = SequenceMatcher(
+                None,
+                prefix,
+                candidate[offset : offset + length],
+            ).ratio()
+            if best is None or score > best[0]:
+                best = (score, offset)
+    if best is not None and best[0] >= 0.6:
+        return best[1]
+    return None
 
 
 def _refined_segment_start(
@@ -178,21 +202,13 @@ def _refined_match_start(
             return _refined_segment_start(segments[start], previous_segment)
         return word_starts[exact_start]
 
-    # Whisper can substitute a few characters. Use a matching block near the
-    # source opening, while rejecting coincidental single-character matches.
-    opening_limit = max(2, len(source) // 10)
-    minimum_block = 2 if len(source) >= 4 else 1
-    blocks = SequenceMatcher(None, source, candidate).get_matching_blocks()
-    opening_blocks = [
-        block
-        for block in blocks
-        if block.size >= minimum_block and block.a <= opening_limit
-    ]
-    if opening_blocks:
-        block = min(opening_blocks, key=lambda item: (item.a, item.b))
-        if block.b == 0:
+    # Whisper can substitute a few opening characters. Compare a meaningful
+    # prefix so an earlier incidental word does not pull the onset backward.
+    opening_offset = _fuzzy_opening_offset(source, candidate)
+    if opening_offset is not None:
+        if opening_offset == 0:
             return _refined_segment_start(segments[start], previous_segment)
-        return word_starts[block.b]
+        return word_starts[opening_offset]
 
     return _refined_segment_start(segments[start], previous_segment)
 
@@ -234,6 +250,11 @@ def align_vo_passages(
                 _refined_match_start(segments, start, end, source),
                 score,
                 end_seconds=segments[end].end,
+                timing_anomaly=any(
+                    word.end - word.start >= 2.0
+                    for segment in segments[start : end + 1]
+                    for word in segment.words
+                ),
             )
         )
         search_from = start + 1
@@ -514,8 +535,13 @@ def verify_suspicious_vo_matches(
     fallback_model_name: str = "medium",
     suspicious_score: float = 0.8,
     minimum_improvement: float = 0.05,
+    timing_repair_min_score: float = 0.65,
 ) -> list[VoMatch]:
-    suspicious = [match for match in matches if match.score < suspicious_score]
+    suspicious = [
+        match
+        for match in matches
+        if match.score < suspicious_score or match.timing_anomaly
+    ]
     if not suspicious:
         return list(matches)
 
@@ -544,7 +570,13 @@ def verify_suspicious_vo_matches(
         if not local_segments:
             continue
         candidate = align_vo_passages([original.passage], local_segments)[0]
-        if candidate.score >= original.score + minimum_improvement:
+        materially_improved = candidate.score >= original.score + minimum_improvement
+        repaired_timing = (
+            original.timing_anomaly
+            and not candidate.timing_anomaly
+            and candidate.score >= timing_repair_min_score
+        )
+        if materially_improved or repaired_timing:
             replacements[original.passage.line_index] = candidate
 
     return [replacements.get(match.passage.line_index, match) for match in matches]

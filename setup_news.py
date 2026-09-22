@@ -113,7 +113,11 @@ def extract_name_from_cue_segment(text: str) -> str:
 
     # Heuristic 0: cues often look like "<name>, <role/title/location>".
     if "," in cue or "，" in cue:
-        left = re.split(r"[,，]", cue, maxsplit=1)[0].strip()
+        left, right = [part.strip() for part in re.split(r"[,，]", cue, maxsplit=1)]
+        if ROLE_PHRASE_RE.fullmatch(left):
+            best_right = pick_best_english_phrase(right)
+            if looks_like_english_name(best_right):
+                return best_right
         if left:
             best_left = pick_best_english_phrase(left)
             if looks_like_english_name(best_left):

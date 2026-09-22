@@ -22,6 +22,19 @@ timestamp_vo = load_module("timestamp_vo", MODULE_PATH)
 
 
 class TimestampVoTest(unittest.TestCase):
+    def test_extracts_vo_without_youtube_headline(self) -> None:
+        body = "\n".join(
+            [
+                "尼泊爾洪災首場發放｜#大愛新聞 #尼泊爾洪災 #慈濟",
+                "第一段旁白。",
+                "First narration.",
+            ]
+        )
+
+        passages = timestamp_vo.extract_vo_passages(body)
+
+        self.assertEqual([passage.text for passage in passages], ["第一段旁白。"])
+
     def test_extracts_vo_and_excludes_super_interview_and_report(self) -> None:
         body = "\n".join(
             [
@@ -187,6 +200,38 @@ class TimestampVoTest(unittest.TestCase):
         self.assertEqual(match.start_seconds, 136.2)
         self.assertEqual(timestamp_vo._format_timecode(match.start_seconds), "0216")
 
+    def test_prefers_full_fuzzy_opening_over_earlier_incidental_words(self) -> None:
+        source = timestamp_vo._normalize_for_alignment(
+            "眾人匯集善念，見證自己並非一無所有。"
+        )
+        segments = [
+            timestamp_vo.TranscriptSegment(
+                204.0,
+                208.0,
+                "大家眾人的力量這愛心",
+                words=(
+                    timestamp_vo.TranscriptWord(204.0, 208.0, "大家眾人的力量這愛心", 0.9),
+                ),
+            ),
+            timestamp_vo.TranscriptSegment(
+                216.92,
+                220.54,
+                "眾人會及善念見證自己並非一無所有",
+                words=(
+                    timestamp_vo.TranscriptWord(
+                        216.92,
+                        220.54,
+                        "眾人會及善念見證自己並非一無所有",
+                        0.9,
+                    ),
+                ),
+            ),
+        ]
+
+        start = timestamp_vo._refined_match_start(segments, 0, 1, source)
+
+        self.assertEqual(start, 216.92)
+
     def test_prior_window_cannot_hide_next_passage_start(self) -> None:
         passages = [
             timestamp_vo.VoPassage(0, "firstsecond", None),
@@ -289,6 +334,38 @@ class TimestampVoTest(unittest.TestCase):
                 transcribe.call_args_list[1].kwargs,
                 {"clip_ranges": [(46.46, 60.36)]},
             )
+
+    def test_timestamp_body_rechecks_stretched_word_timing_with_medium(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            body_path = Path(tmp_dir) / "body.txt"
+            video_path = Path(tmp_dir) / "video.mp4"
+            body_path.write_text("眾人匯集善念。\n", encoding="utf-8")
+            video_path.touch()
+            small_segments = [
+                timestamp_vo.TranscriptSegment(
+                    203.84,
+                    218.50,
+                    "眾人匯集善念",
+                    words=(
+                        timestamp_vo.TranscriptWord(203.84, 204.62, "眾", 0.9),
+                        timestamp_vo.TranscriptWord(204.62, 217.72, "人", 0.99),
+                        timestamp_vo.TranscriptWord(217.72, 218.50, "匯集善念", 0.9),
+                    ),
+                )
+            ]
+            medium_segments = [
+                timestamp_vo.TranscriptSegment(216.92, 218.50, "眾人會及善念")
+            ]
+
+            with mock.patch.object(
+                timestamp_vo,
+                "transcribe",
+                side_effect=[small_segments, medium_segments],
+            ) as transcribe:
+                matches = timestamp_vo.timestamp_body(body_path, video_path)
+
+            self.assertEqual(matches[0].start_seconds, 216.92)
+            self.assertEqual(transcribe.call_count, 2)
 
     def test_adds_missing_single_super_duration_between_vo_passages(self) -> None:
         body = "\n".join(

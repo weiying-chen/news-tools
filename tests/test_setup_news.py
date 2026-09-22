@@ -265,6 +265,24 @@ class SetupNewsPeopleTest(unittest.TestCase):
             ],
         )
 
+    def test_role_before_comma_uses_name_on_right(self) -> None:
+        lines = [
+            '(15) Mayor,Kedar Nath Khatiwada',
+            '/*SUPER:',
+            '加爾奇鄉長｜凱達納特//',
+            '*/',
+        ]
+
+        self.assertEqual(
+            setup_module.detect_people_entries(lines),
+            [
+                {
+                    'label': '加爾奇鄉長｜凱達納特',
+                    'name_en': 'Kedar Nath Khatiwada',
+                }
+            ],
+        )
+
     def test_cjk_label_english_right_overrides_location_cue(self) -> None:
         lines = [
             '(15" Machache)(秒數更正)',
