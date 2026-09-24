@@ -562,6 +562,51 @@ class TimestampVoTest(unittest.TestCase):
         self.assertEqual(durations, [])
         self.assertEqual(len(warnings), 2)
 
+    def test_infers_consecutive_supers_from_distinct_transcript_matches(self) -> None:
+        body = "\n".join(
+            [
+                "0010",
+                "第一段旁白。",
+                "/*SUPER:",
+                "志工｜梁麗娟//",
+                "我先把桌子擦乾淨//",
+                "還有把凳子排整齊//",
+                "*/",
+                "/*SUPER:",
+                "志工｜王文德//",
+                "有機會也要踏出來//",
+                "跟其他人溝通//",
+                "*/",
+                "0035",
+                "第二段旁白。",
+            ]
+        )
+        passages = timestamp_vo.extract_vo_passages(body)
+        matches = [
+            timestamp_vo.VoMatch(passages[0], 10.0, 0.9, end_seconds=15.0),
+            timestamp_vo.VoMatch(passages[1], 35.0, 0.9, end_seconds=40.0),
+        ]
+        segments = [
+            timestamp_vo.TranscriptSegment(
+                16.0, 22.0, "我先把桌子擦乾淨還有把凳子排整齊"
+            ),
+            timestamp_vo.TranscriptSegment(
+                23.0, 31.0, "有機會也要踏出來跟其他人溝通"
+            ),
+        ]
+
+        durations, warnings = timestamp_vo.infer_missing_super_durations(
+            body,
+            matches,
+            segments,
+        )
+
+        self.assertEqual(warnings, [])
+        self.assertEqual(
+            [(item.line_index, item.seconds) for item in durations],
+            [(6, 6), (11, 8)],
+        )
+
     def test_infers_one_missing_duration_beside_known_super(self) -> None:
         body = "\n".join(
             [

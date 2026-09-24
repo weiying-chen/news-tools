@@ -326,6 +326,58 @@ def extract_super_blocks(body: str) -> list[SuperBlock]:
     return blocks
 
 
+def _super_dialogue(lines: Sequence[str], block: SuperBlock) -> str:
+    content = [
+        line.strip().removesuffix("//").strip()
+        for line in lines[block.start_line_index + 1 : block.end_line_index]
+        if line.strip()
+    ]
+    if not content:
+        return ""
+    # The first SUPER line identifies the speaker; subsequent lines are the
+    # spoken dialogue that can be aligned with the Whisper transcript.
+    return "".join(content[1:])
+
+
+def _match_consecutive_super_durations(
+    body: str,
+    blocks: Sequence[SuperBlock],
+    speech: Sequence[TranscriptSegment],
+    *,
+    minimum_score: float = 0.45,
+) -> list[SuperDuration] | None:
+    lines = body.splitlines()
+    passages = [
+        VoPassage(block.end_line_index, _super_dialogue(lines, block), None)
+        for block in blocks
+    ]
+    if not speech or any(not passage.text for passage in passages):
+        return None
+    try:
+        matches = align_vo_passages(passages, speech)
+    except ValueError:
+        return None
+    if any(
+        match.score < minimum_score or match.end_seconds is None
+        for match in matches
+    ):
+        return None
+    if any(
+        current.start_seconds < previous.end_seconds
+        for previous, current in zip(matches, matches[1:])
+        if previous.end_seconds is not None
+    ):
+        return None
+    return [
+        SuperDuration(
+            match.passage.line_index,
+            max(1, math.floor((match.end_seconds - match.start_seconds) + 0.5)),
+        )
+        for match in matches
+        if match.end_seconds is not None
+    ]
+
+
 def infer_missing_super_durations(
     body: str,
     matches: Sequence[VoMatch],
@@ -387,10 +439,35 @@ def infer_missing_super_durations(
                 if previous_match.passage.line_index < block.start_line_index
                 and block.end_line_index < following_match.passage.line_index
             ]
+        unresolved_blocks = [
+            block
+            for block in blocks_between
+            if block.duration_seconds is None
+        ]
         if len(missing_blocks) != 1 or any(
             block.duration_seconds is None and block not in missing_blocks
             for block in blocks_between
         ):
+            upper = following_match.start_seconds
+            lower = (
+                0.0
+                if previous_index is None
+                else ordered_matches[previous_index].end_seconds
+            )
+            if lower is not None and missing_blocks == unresolved_blocks:
+                speech = [
+                    segment
+                    for segment in segments
+                    if segment.start >= lower - 0.2 and segment.end <= upper + 0.2
+                ]
+                matched = _match_consecutive_super_durations(
+                    body,
+                    missing_blocks,
+                    speech,
+                )
+                if matched is not None:
+                    durations.extend(matched)
+                    continue
             warnings.extend(
                 f"SUPER ending on line {block.end_line_index + 1} shares an ambiguous VO gap"
                 for block in missing_blocks
