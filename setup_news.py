@@ -514,11 +514,41 @@ def detect_people_entries(lines: list[str]) -> list[dict[str, str]]:
     pending_english_names: list[str] = []
     in_super = False
     consumed_super_header = False
+    multiline_cue_end = -1
 
     for idx, line in enumerate(lines):
+        if idx <= multiline_cue_end:
+            continue
         s = normalize_voice_only_super_header(line).strip()
         if not s:
             continue
+
+        if s.startswith(("(", "（")) and not s.endswith((")", "）")):
+            closing_index = next(
+                (
+                    following
+                    for following in range(idx + 1, len(lines))
+                    if lines[following].strip().endswith((")", "）"))
+                ),
+                None,
+            )
+            if closing_index is not None and not any(
+                lines[between].strip() == "/*SUPER:"
+                for between in range(idx + 1, closing_index + 1)
+            ):
+                closing = "）" if s.startswith("（") else ")"
+                english_name = extract_english_name_hint(s + closing)
+                if not english_name:
+                    english_name = extract_english_name_hint(
+                        " ".join(
+                            lines[part].strip()
+                            for part in range(idx, closing_index + 1)
+                        )
+                    )
+                if english_name:
+                    pending_english_names.append(english_name)
+                    multiline_cue_end = closing_index
+                    continue
 
         english_name = extract_english_name_hint(s)
         if english_name:

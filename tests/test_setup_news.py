@@ -76,6 +76,26 @@ class SetupNewsPeopleTest(unittest.TestCase):
             ['慈濟志工｜陳大明'],
         )
 
+    def test_extracts_name_from_multiline_parenthesized_cue(self) -> None:
+        lines = [
+            '(19秒Eleanore Vega',
+            'Eaton Fire Recipient )',
+            '/*SUPER:',
+            '受災居民│埃莉諾·維加//',
+            '感謝大家的幫助//',
+            '*/',
+        ]
+
+        self.assertEqual(
+            setup_module.detect_people_entries(lines),
+            [
+                {
+                    'label': '受災居民｜埃莉諾·維加',
+                    'name_en': 'Eleanore Vega',
+                }
+            ],
+        )
+
     def test_anonymous_super_role_does_not_require_english_name(self) -> None:
         lines = [
             '/*SUPER:',
