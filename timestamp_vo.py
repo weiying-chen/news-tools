@@ -582,12 +582,7 @@ def _merge_clip_ranges(
     return merged
 
 
-def transcribe(
-    video: Path,
-    model_name: str,
-    *,
-    clip_ranges: Sequence[tuple[float, float]] | None = None,
-) -> list[TranscriptSegment]:
+def require_transcription_dependencies() -> tuple[object, object]:
     try:
         from faster_whisper import WhisperModel
         from faster_whisper.audio import decode_audio
@@ -596,6 +591,16 @@ def transcribe(
             "faster-whisper is not installed for this Python interpreter; "
             "run this command with a virtual environment that provides it"
         ) from error
+    return WhisperModel, decode_audio
+
+
+def transcribe(
+    video: Path,
+    model_name: str,
+    *,
+    clip_ranges: Sequence[tuple[float, float]] | None = None,
+) -> list[TranscriptSegment]:
+    WhisperModel, decode_audio = require_transcription_dependencies()
 
     model = WhisperModel(model_name, device="cpu", compute_type="int8")
     audio_inputs: list[tuple[object, float]] = [(str(video), 0.0)]

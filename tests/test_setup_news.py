@@ -76,6 +76,21 @@ class SetupNewsPeopleTest(unittest.TestCase):
             ['慈濟志工｜陳大明'],
         )
 
+    def test_equivalent_super_separators_are_deduplicated(self) -> None:
+        lines = [
+            '/*SUPER:',
+            '慈濟基金會副總執行長｜林靜憪//',
+            '*/',
+            '/*SUPER:',
+            '慈濟基金會副總執行長    林靜憪//',
+            '*/',
+        ]
+
+        self.assertEqual(
+            setup_module.find_super_labels_missing_english_names(lines),
+            ['慈濟基金會副總執行長｜林靜憪'],
+        )
+
     def test_extracts_name_from_multiline_parenthesized_cue(self) -> None:
         lines = [
             '(19秒Eleanore Vega',
@@ -227,6 +242,10 @@ class SetupNewsPeopleTest(unittest.TestCase):
 
         with (
             mock.patch.object(
+                setup_module.timestamp_vo,
+                'require_transcription_dependencies',
+            ),
+            mock.patch.object(
                 setup_module,
                 'download_youtube_video',
                 return_value=video,
@@ -247,6 +266,24 @@ class SetupNewsPeopleTest(unittest.TestCase):
             workspace,
         )
         timestamp.assert_called_once_with(body, video)
+
+    def test_transcription_dependency_is_checked_before_download(self) -> None:
+        with (
+            mock.patch.object(
+                setup_module.timestamp_vo,
+                'require_transcription_dependencies',
+                side_effect=RuntimeError('missing dependency'),
+            ),
+            mock.patch.object(setup_module, 'download_youtube_video') as download,
+        ):
+            with self.assertRaisesRegex(RuntimeError, 'missing dependency'):
+                setup_module.download_and_timestamp_video(
+                    'https://www.youtube.com/watch?v=tCL86SwAlFI',
+                    Path('/work/news'),
+                    Path('/work/news/body.txt'),
+                )
+
+        download.assert_not_called()
 
     def test_parenthesized_name_with_extra_spaces_keeps_full_name(self) -> None:
         lines = [

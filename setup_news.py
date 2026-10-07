@@ -377,6 +377,7 @@ def download_and_timestamp_video(
     workspace: Path,
     body_path: Path,
 ) -> Path:
+    timestamp_vo.require_transcription_dependencies()
     video_path = download_youtube_video(youtube_url, workspace)
     timestamp_vo.timestamp_body(body_path, video_path)
     return video_path
@@ -489,6 +490,19 @@ def split_label_name(label: str) -> tuple[str, str]:
     return label.strip(), ""
 
 
+def normalize_super_label(label: str) -> str:
+    normalized = (
+        unicodedata.normalize("NFKC", label)
+        .replace("│", "｜")
+        .replace("|", "｜")
+        .strip()
+    )
+    role, name = split_label_name(normalized)
+    if name:
+        return f"{role}｜{name}"
+    return normalized
+
+
 def looks_like_named_super_label(text: str) -> bool:
     candidate = text.strip().replace("│", "｜")
     if not candidate.endswith("//"):
@@ -574,10 +588,11 @@ def detect_people_entries(lines: list[str]) -> list[dict[str, str]]:
         if consumed_super_header and not looks_like_named_super_label(s):
             continue
 
-        label = s.replace("│", "｜")
+        label = s
         if label.endswith("//"):
             label = label[:-2].rstrip()
         label = label.rstrip("｜|:：").rstrip()
+        label = normalize_super_label(label)
         if not label:
             consumed_super_header = True
             continue
