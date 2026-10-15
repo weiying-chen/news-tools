@@ -279,6 +279,14 @@ def _duration_from_cue(line: str) -> int | None:
     )
     if explicit_seconds:
         return int(explicit_seconds[-1])
+    parenthetical_contents = re.findall(r"[（(]([^（）()]*)[）)]", stripped)
+    for content in reversed(parenthetical_contents):
+        dotted_duration = re.search(
+            r"(?:^|[.．。])\s*(\d{1,2})\s*[.．。]\s*\S",
+            content,
+        )
+        if dotted_duration:
+            return int(dotted_duration.group(1))
     bare_parenthesized = re.findall(r"[（(]\s*(\d{1,2})\s*[）)]", stripped)
     return int(bare_parenthesized[-1]) if bare_parenthesized else None
 

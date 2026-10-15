@@ -532,6 +532,33 @@ class TimestampVoTest(unittest.TestCase):
         self.assertEqual(durations, [])
         self.assertEqual(warnings, [])
 
+    def test_reads_duration_from_dotted_named_cues(self) -> None:
+        body = "\n".join(
+            [
+                "(12．Leonisa Basallaje, Mother of Hanilyn)",
+                "/*SUPER:",
+                "哈尼琳的母親｜Leonisa Basallaje //",
+                "*/",
+                "(NS。12。Jimmy Chua)",
+                "/*SUPER:",
+                "慈濟志工｜林國榮//",
+                "*/",
+                "(13．Rodolfo Basallaje, Father of Hanilyn)",
+                "/*SUPER:",
+                "哈尼琳的父親｜Rodolfo Basallaje //",
+                "*/",
+                "(9．Hanilyn Basallaje, 哈尼琳·巴薩杰拉傑)",
+                "/*SUPER:",
+                "患者｜哈尼琳//",
+                "*/",
+            ]
+        )
+
+        self.assertEqual(
+            [block.duration_seconds for block in timestamp_vo.extract_super_blocks(body)],
+            [12, 12, 13, 9],
+        )
+
     def test_preserves_duration_in_multiline_preceding_cue(self) -> None:
         body = "\n".join(
             [
