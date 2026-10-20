@@ -76,12 +76,18 @@ def extract_vo_passages(body: str) -> list[VoPassage]:
     passages: list[VoPassage] = []
     pending_timecode: str | None = None
     in_comment = False
+    parenthetical_depth = 0
 
     for index, raw in enumerate(lines):
         line = raw.strip()
         if in_comment:
             if "*/" in line:
                 in_comment = False
+            continue
+        if parenthetical_depth:
+            parenthetical_depth += line.count("(") + line.count("（")
+            parenthetical_depth -= line.count(")") + line.count("）")
+            parenthetical_depth = max(0, parenthetical_depth)
             continue
         if line.startswith("/*"):
             in_comment = "*/" not in line
@@ -92,7 +98,16 @@ def extract_vo_passages(body: str) -> list[VoPassage]:
         if TIMECODE_RE.fullmatch(line):
             pending_timecode = line
             continue
-        if line == "~" or line.startswith("(") or line.endswith("*/"):
+        if line.startswith(("(", "（")):
+            parenthetical_depth = max(
+                0,
+                line.count("(")
+                + line.count("（")
+                - line.count(")")
+                - line.count("）"),
+            )
+            continue
+        if line == "~" or line.endswith("*/"):
             continue
         if "#大愛新聞" in line:
             continue

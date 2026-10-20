@@ -70,6 +70,22 @@ class TimestampVoTest(unittest.TestCase):
             [("第一段旁白。", "0018"), ("第二段旁白。", None)],
         )
 
+    def test_excludes_multiline_parenthesized_production_note(self) -> None:
+        body = "\n".join(
+            [
+                "最後一段旁白。",
+                "/*REPORT:",
+                "記者與製作人//",
+                "*/",
+                "((請上傳網路新聞)",
+                "伊普高中(Ipswich State High School))",
+            ]
+        )
+
+        passages = timestamp_vo.extract_vo_passages(body)
+
+        self.assertEqual([passage.text for passage in passages], ["最後一段旁白。"])
+
     def test_aligns_known_vo_to_ordered_transcript_windows(self) -> None:
         passages = [
             timestamp_vo.VoPassage(0, "夏天還是鬧起血荒", None),
