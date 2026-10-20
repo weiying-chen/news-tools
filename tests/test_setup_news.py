@@ -509,6 +509,23 @@ class SetupNewsPeopleTest(unittest.TestCase):
             ),
         )
 
+    def test_empty_super_name_drops_trailing_separator_in_meta(self) -> None:
+        lines = [
+            '/*SUPER:',
+            '高中生志工│//',
+            '這是我們的專業//',
+            '*/',
+        ]
+
+        self.assertIn(
+            '高中生志工',
+            setup_module.render_meta_txt(lines).splitlines(),
+        )
+        self.assertNotIn(
+            '高中生志工｜',
+            setup_module.render_meta_txt(lines).splitlines(),
+        )
+
     def test_voice_only_super_header_keeps_three_explicit_fields(self) -> None:
         lines = [
             '/*SUPER:',

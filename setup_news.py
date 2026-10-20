@@ -496,6 +496,8 @@ def normalize_super_label(label: str) -> str:
         .replace("│", "｜")
         .replace("|", "｜")
         .strip()
+        .rstrip("｜:：")
+        .rstrip()
     )
     role, name = split_label_name(normalized)
     if name:
