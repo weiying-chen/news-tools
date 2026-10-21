@@ -425,6 +425,35 @@ class TimestampVoTest(unittest.TestCase):
         self.assertEqual([(item.line_index, item.seconds) for item in durations], [(6, 7)])
         self.assertIn("\n*/\n7\n", rendered)
 
+    def test_uses_vo_anchor_gap_when_single_super_has_no_transcript(self) -> None:
+        body = "\n".join(
+            [
+                "0044",
+                "第一段旁白。",
+                "(Oliver Liao)",
+                "/*SUPER:",
+                "代表｜廖文哲//",
+                "訪問翻譯內容//",
+                "*/",
+                "0116",
+                "第二段旁白。",
+            ]
+        )
+        passages = timestamp_vo.extract_vo_passages(body)
+        matches = [
+            timestamp_vo.VoMatch(passages[0], 43.84, 0.9, end_seconds=57.30),
+            timestamp_vo.VoMatch(passages[1], 75.28, 0.9, end_seconds=82.0),
+        ]
+
+        durations, warnings = timestamp_vo.infer_missing_super_durations(
+            body,
+            matches,
+            [],
+        )
+
+        self.assertEqual(warnings, [])
+        self.assertEqual([(item.line_index, item.seconds) for item in durations], [(6, 18)])
+
     def test_adds_missing_super_duration_before_first_vo(self) -> None:
         body = "\n".join(
             [

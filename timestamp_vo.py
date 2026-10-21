@@ -544,15 +544,25 @@ def infer_missing_super_durations(
                 for segment in segments
                 if segment.start >= lower - 0.2 and segment.end <= upper + 0.2
             ]
+        known_seconds = sum(
+            block.duration_seconds or 0 for block in blocks_between
+        )
         if not speech:
             block = missing_blocks[0]
+            if previous_index is not None:
+                remaining_seconds = upper - lower - known_seconds
+                if remaining_seconds > 0:
+                    durations.append(
+                        SuperDuration(
+                            block.end_line_index,
+                            max(1, math.floor(remaining_seconds + 0.5)),
+                        )
+                    )
+                    continue
             warnings.append(
                 f"SUPER ending on line {block.end_line_index + 1} has no clear speech interval"
             )
             continue
-        known_seconds = sum(
-            block.duration_seconds or 0 for block in blocks_between
-        )
         remaining_seconds = speech[-1].end - speech[0].start - known_seconds
         if remaining_seconds <= 0:
             block = missing_blocks[0]
