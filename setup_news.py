@@ -42,7 +42,9 @@ EN_NAME_HINT_RE = re.compile(
 EN_NAME_VALUE_RE = re.compile(
     r"[A-Za-zÀ-ÖØ-öø-ÿĀ-žḀ-ỹ][A-Za-zÀ-ÖØ-öø-ÿĀ-žḀ-ỹ.\s\"'“”‘’\-]*[A-Za-zÀ-ÖØ-öø-ÿĀ-žḀ-ỹ.]"
 )
-SOUND_BITE_PREFIX_RE = re.compile(r"^\s*SB\s*[:：\-]?\s*")
+SOUND_BITE_PREFIX_RE = re.compile(
+    r"^\s*(?:\d{1,3}\s*[秒分]\s*)?SB\s*[:：\-]?\s*"
+)
 CUE_PAREN_PREFIX_RE = re.compile(r"^\s*[（(][^（）()]*[）)]\s*(.+?)\s*$")
 NUMBERED_PAREN_NAME_RE = re.compile(
     r"^\s*\d+\s*[（(]\s*([^（）()]+?)\s*[）)]\s*$"

@@ -422,6 +422,24 @@ class SetupNewsPeopleTest(unittest.TestCase):
             ],
         )
 
+    def test_sound_bite_marker_after_duration_is_omitted_from_name(self) -> None:
+        lines = [
+            '(15秒 SB Runa Oshiwa)',
+            '/*SUPER:',
+            '民眾｜露娜//',
+            '*/',
+        ]
+
+        self.assertEqual(
+            setup_module.detect_people_entries(lines),
+            [
+                {
+                    'label': '民眾｜露娜',
+                    'name_en': 'Runa Oshiwa',
+                }
+            ],
+        )
+
     def test_parenthesized_organization_before_person_name_is_skipped(self) -> None:
         lines = [
             '(17) (Shree Bageshwori Secondary School)( GYANU THAPA)',
