@@ -15,6 +15,10 @@ from typing import Sequence
 
 TIMECODE_RE = re.compile(r"^\d{3,4}$")
 CJK_RE = re.compile(r"[\u3400-\u9fff]")
+PRODUCTION_CUE_RE = re.compile(
+    r"^(?:>|(?:NS|NAT)(?:\s*[-－—:：]|$))",
+    re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True)
@@ -70,6 +74,10 @@ def _is_chinese_source(line: str) -> bool:
     return len(CJK_RE.findall(line)) >= 2
 
 
+def _is_production_cue(line: str) -> bool:
+    return bool(PRODUCTION_CUE_RE.match(line))
+
+
 def extract_vo_passages(body: str) -> list[VoPassage]:
     """Return Chinese VO paragraphs outside SUPER, SB, and REPORT structures."""
     lines = body.splitlines()
@@ -110,6 +118,8 @@ def extract_vo_passages(body: str) -> list[VoPassage]:
         if line == "~" or line.endswith("*/"):
             continue
         if "#大愛新聞" in line:
+            continue
+        if _is_production_cue(line):
             continue
         if not _is_chinese_source(line):
             continue

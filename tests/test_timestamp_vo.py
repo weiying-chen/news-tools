@@ -86,6 +86,24 @@ class TimestampVoTest(unittest.TestCase):
 
         self.assertEqual([passage.text for passage in passages], ["最後一段旁白。"])
 
+    def test_excludes_bare_production_cues(self) -> None:
+        body = "\n".join(
+            [
+                "第一段旁白。",
+                "NS-烤土司",
+                "NAT：現場聲",
+                ">(莉琪 請上傳網路新聞 E4)",
+                "第二段旁白。",
+            ]
+        )
+
+        passages = timestamp_vo.extract_vo_passages(body)
+
+        self.assertEqual(
+            [passage.text for passage in passages],
+            ["第一段旁白。", "第二段旁白。"],
+        )
+
     def test_aligns_known_vo_to_ordered_transcript_windows(self) -> None:
         passages = [
             timestamp_vo.VoPassage(0, "夏天還是鬧起血荒", None),
