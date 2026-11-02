@@ -91,7 +91,11 @@ class TimestampVoTest(unittest.TestCase):
             [
                 "第一段旁白。",
                 "NS-烤土司",
+                "NS報紙放進信箱",
+                "NS百歲體操現場",
+                "NS增田奶奶唱歌ending",
                 "NAT：現場聲",
+                "NAT現場聲",
                 ">(莉琪 請上傳網路新聞 E4)",
                 "第二段旁白。",
             ]

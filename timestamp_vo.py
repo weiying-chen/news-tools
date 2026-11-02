@@ -16,7 +16,7 @@ from typing import Sequence
 TIMECODE_RE = re.compile(r"^\d{3,4}$")
 CJK_RE = re.compile(r"[\u3400-\u9fff]")
 PRODUCTION_CUE_RE = re.compile(
-    r"^(?:>|(?:NS|NAT)(?:\s*[-－—:：]|$))",
+    r"^(?:>|NS|NAT)",
     re.IGNORECASE,
 )
 
