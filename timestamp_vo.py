@@ -697,6 +697,7 @@ def verify_suspicious_vo_matches(
     suspicious_score: float = 0.8,
     minimum_improvement: float = 0.05,
     timing_repair_min_score: float = 0.65,
+    min_score: float = 0.45,
 ) -> list[VoMatch]:
     suspicious = [
         match
@@ -713,6 +714,19 @@ def verify_suspicious_vo_matches(
         )
         for match in suspicious
     }
+    # A weak match can land far from the speech; include the neighboring VO gap.
+    for index, match in enumerate(matches):
+        if match.score >= min_score:
+            continue
+        start, end = ranges_by_line[match.passage.line_index]
+        if index:
+            previous = matches[index - 1]
+            start = min(start, previous.end_seconds or previous.start_seconds)
+        else:
+            start = 0.0
+        if index + 1 < len(matches):
+            end = max(end, matches[index + 1].start_seconds)
+        ranges_by_line[match.passage.line_index] = (start, end)
     clip_ranges = _merge_clip_ranges(list(ranges_by_line.values()))
     fallback_segments = transcribe(
         video_path,
@@ -759,7 +773,7 @@ def timestamp_body(
     segments = transcribe(video_path, model_name)
     matches = align_vo_passages(passages, segments)
     if model_name == "small":
-        matches = verify_suspicious_vo_matches(video_path, matches)
+        matches = verify_suspicious_vo_matches(video_path, matches, min_score=min_score)
     weak = [match for match in matches if match.score < min_score]
     if weak:
         raise ValueError(

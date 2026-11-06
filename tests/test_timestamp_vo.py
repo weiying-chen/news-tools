@@ -22,6 +22,19 @@ timestamp_vo = load_module("timestamp_vo", MODULE_PATH)
 
 
 class TimestampVoTest(unittest.TestCase):
+    def test_weak_match_retries_between_neighboring_passages(self):
+        passage = timestamp_vo.VoPassage(2, '相互讚嘆彼此肯定', None)
+        matches = [
+            timestamp_vo.VoMatch(timestamp_vo.VoPassage(0, '前段旁白', None), 44, .9, 60),
+            timestamp_vo.VoMatch(passage, 93, .13, 97),
+            timestamp_vo.VoMatch(timestamp_vo.VoPassage(4, '後段旁白', None), 98, .9, 110),
+        ]
+        segment = timestamp_vo.TranscriptSegment(74, 79, passage.text)
+        with mock.patch.object(timestamp_vo, 'transcribe', return_value=[segment]) as transcribe:
+            result = timestamp_vo.verify_suspicious_vo_matches(Path('video.mp4'), matches)
+        self.assertEqual(transcribe.call_args.kwargs['clip_ranges'], [(60, 100.0)])
+        self.assertEqual(result[1].start_seconds, 74)
+
     def test_extracts_vo_without_youtube_headline(self) -> None:
         body = "\n".join(
             [
