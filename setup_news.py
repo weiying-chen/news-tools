@@ -200,7 +200,7 @@ def extract_docx_hyperlink_urls(docx_path: Path) -> list[str]:
 def body_lines_after_marker(lines: list[str], marker: str = "<") -> list[str]:
     start_idx = 0
     for idx, line in enumerate(lines):
-        if line.strip() == marker:
+        if line.rstrip().endswith(marker):
             start_idx = idx + 1
             break
 

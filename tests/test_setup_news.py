@@ -23,6 +23,9 @@ setup_module = load_module('setup_news', SETUP_MODULE_PATH)
 
 
 class SetupNewsPeopleTest(unittest.TestCase):
+    def test_body_after_trailing_marker(self):
+        self.assertEqual(setup_module.body_lines_after_marker(['Title', 'Introduction <', '', 'VO']), ['VO'])
+
     def test_missing_source_url_warns_that_video_steps_are_skipped(self) -> None:
         error = io.StringIO()
 
