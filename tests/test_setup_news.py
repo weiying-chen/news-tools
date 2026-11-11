@@ -2,6 +2,7 @@ import importlib.util
 import contextlib
 import io
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -170,11 +171,24 @@ class SetupNewsPeopleTest(unittest.TestCase):
                 '--extractor-args',
                 'youtubepot-bgutilscript:script_path=/home/tester/.local/share/bgutil-ytdlp-pot-provider/server/build/generate_once.js',
                 '--extractor-args',
-                'youtube:player_client=mweb',
+                'youtube:player_client=mweb,tv,web_safari',
                 '--paths',
                 '/work/news',
                 'https://www.youtube.com/watch?v=tCL86SwAlFI',
             ],
+        )
+
+    def test_youtube_download_command_uses_exported_cookies(self) -> None:
+        command = setup_module.build_youtube_download_command(
+            'https://www.youtube.com/watch?v=tCL86SwAlFI',
+            Path('/work/news'),
+            cookies_path=Path('/home/tester/.config/yt-dlp/youtube-cookies.txt'),
+        )
+
+        self.assertIn('--cookies', command)
+        self.assertEqual(
+            command[command.index('--cookies') + 1],
+            '/home/tester/.config/yt-dlp/youtube-cookies.txt',
         )
 
     def test_youtube_download_retries_with_combined_format(self) -> None:
@@ -227,7 +241,10 @@ class SetupNewsPeopleTest(unittest.TestCase):
             mock.patch.object(setup_module.subprocess, 'run', side_effect=failure),
             mock.patch.object(setup_module.shutil, 'rmtree') as rmtree,
         ):
-            with self.assertRaises(setup_module.subprocess.CalledProcessError):
+            with self.assertRaisesRegex(
+                RuntimeError,
+                'youtube-cookies.txt',
+            ):
                 setup_module.download_youtube_video(
                     'https://www.youtube.com/watch?v=tCL86SwAlFI',
                     Path('/work/news'),
@@ -269,6 +286,44 @@ class SetupNewsPeopleTest(unittest.TestCase):
             workspace,
         )
         timestamp.assert_called_once_with(body, video)
+
+    def test_existing_video_skips_download_and_timestamps_body(self) -> None:
+        workspace = Path('/work/news')
+        body = workspace / 'body.txt'
+        video = Path('/downloads/manual.mp4')
+
+        with (
+            mock.patch.object(
+                setup_module.timestamp_vo,
+                'require_transcription_dependencies',
+            ),
+            mock.patch.object(setup_module, 'download_youtube_video') as download,
+            mock.patch.object(
+                setup_module.timestamp_vo,
+                'timestamp_body',
+            ) as timestamp,
+        ):
+            result = setup_module.download_and_timestamp_video(
+                'https://www.youtube.com/watch?v=tCL86SwAlFI',
+                workspace,
+                body,
+                existing_video=video,
+            )
+
+        self.assertEqual(result, video)
+        download.assert_not_called()
+        timestamp.assert_called_once_with(body, video)
+
+    def test_finds_only_video_in_workspace_for_manual_download(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            video = workspace / 'manually downloaded.mp4'
+            video.touch()
+            (workspace / 'body.txt').touch()
+
+            result = setup_module.find_existing_workspace_video(workspace)
+
+        self.assertEqual(result, video)
 
     def test_transcription_dependency_is_checked_before_download(self) -> None:
         with (

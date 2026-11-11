@@ -26,6 +26,20 @@ duration below a SUPER block when exactly one interview occurs between two VO
 passages. Existing cue durations are preserved, and ambiguous intervals are
 left unchanged with a warning.
 
+If YouTube blocks the automatic download, place one manually downloaded video in
+the workspace root before running setup-news. It is detected automatically, the
+YouTube download is skipped, and timestamp generation continues normally:
+
+```bash
+cp /path/to/downloaded-video.mp4 ~/text/news/
+setup-news /path/to/source.docx
+```
+
+After a failed setup already created the workspace files, place the video in the
+workspace and rerun with `--force` before manually editing `body.txt` or `meta.txt`.
+Use `--video` only when the workspace contains multiple videos and one must be
+selected explicitly.
+
 ## Reference generator
 
 Rebuild the extracted, audited, and validated news references:

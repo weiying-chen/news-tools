@@ -297,6 +297,7 @@ def build_youtube_download_command(
     workspace: Path,
     format_selector: str | None = None,
     temp_directory: Path | None = None,
+    cookies_path: Path | None = None,
 ) -> list[str]:
     token_script = (
         Path.home()
@@ -310,8 +311,10 @@ def build_youtube_download_command(
         "--extractor-args",
         f"youtubepot-bgutilscript:script_path={token_script}",
         "--extractor-args",
-        "youtube:player_client=mweb",
+        "youtube:player_client=mweb,tv,web_safari",
     ]
+    if cookies_path is not None:
+        command.extend(["--cookies", str(cookies_path)])
     if format_selector:
         command.extend(["--format", format_selector])
     command.extend(["--paths", str(workspace)])
@@ -342,12 +345,24 @@ def find_downloaded_youtube_video(workspace: Path, youtube_url: str) -> Path:
     return candidates[-1]
 
 
+def find_existing_workspace_video(workspace: Path) -> Path | None:
+    candidates = sorted(
+        path
+        for path in workspace.iterdir()
+        if path.is_file()
+        and path.suffix.lower() in {".mkv", ".mov", ".mp4", ".webm"}
+    )
+    return candidates[0] if len(candidates) == 1 else None
+
+
 def download_youtube_video(youtube_url: str, workspace: Path) -> Path:
     if not shutil.which("yt-dlp"):
         raise RuntimeError("required program not found in PATH: yt-dlp")
     temp_directory = Path(
         tempfile.mkdtemp(prefix=".setup-news-download-", dir=workspace)
     )
+    configured_cookies = Path.home() / ".config/yt-dlp/youtube-cookies.txt"
+    cookies_path = configured_cookies if configured_cookies.is_file() else None
     try:
         try:
             subprocess.run(
@@ -355,20 +370,31 @@ def download_youtube_video(youtube_url: str, workspace: Path) -> Path:
                     youtube_url,
                     workspace,
                     temp_directory=temp_directory,
+                    cookies_path=cookies_path,
                 ),
                 check=True,
             )
         except subprocess.CalledProcessError:
             print("[youtube] Best-quality download failed; retrying format 18")
-            subprocess.run(
-                build_youtube_download_command(
-                    youtube_url,
-                    workspace,
-                    format_selector="18",
-                    temp_directory=temp_directory,
-                ),
-                check=True,
-            )
+            try:
+                subprocess.run(
+                    build_youtube_download_command(
+                        youtube_url,
+                        workspace,
+                        format_selector="18",
+                        temp_directory=temp_directory,
+                        cookies_path=cookies_path,
+                    ),
+                    check=True,
+                )
+            except subprocess.CalledProcessError as error:
+                if cookies_path is None:
+                    raise RuntimeError(
+                        "YouTube rejected the unauthenticated download. Export "
+                        "logged-in YouTube cookies in Netscape format to "
+                        f"{configured_cookies} and retry."
+                    ) from error
+                raise
     finally:
         shutil.rmtree(temp_directory, ignore_errors=True)
     return find_downloaded_youtube_video(workspace, youtube_url)
@@ -378,9 +404,11 @@ def download_and_timestamp_video(
     youtube_url: str,
     workspace: Path,
     body_path: Path,
+    *,
+    existing_video: Path | None = None,
 ) -> Path:
     timestamp_vo.require_transcription_dependencies()
-    video_path = download_youtube_video(youtube_url, workspace)
+    video_path = existing_video or download_youtube_video(youtube_url, workspace)
     timestamp_vo.timestamp_body(body_path, video_path)
     return video_path
 
@@ -759,7 +787,33 @@ def run(args: argparse.Namespace) -> int:
     print(f"[created] {meta_txt.name}")
     for label in find_super_labels_missing_english_names(lines):
         print(f"[warn] SUPER missing English name: {label}", file=sys.stderr)
-    warn_if_source_url_missing(first_url)
+
+    manual_video_value = getattr(args, "video", "")
+    manual_video = (
+        Path(manual_video_value).expanduser().resolve()
+        if manual_video_value
+        else find_existing_workspace_video(workspace)
+    )
+    if manual_video is None:
+        warn_if_source_url_missing(first_url)
+    if manual_video is not None:
+        if not manual_video.is_file():
+            print(f"[error] video file not found: {manual_video}", file=sys.stderr)
+            return 1
+        if not manual_video_value:
+            print(f"[info] using existing video: {manual_video.name}")
+        try:
+            video_path = download_and_timestamp_video(
+                "",
+                workspace,
+                body_txt,
+                existing_video=manual_video,
+            )
+        except (RuntimeError, ValueError) as error:
+            print(f"[error] video preparation failed: {error}", file=sys.stderr)
+            return 1
+        print(f"[timestamped] {body_txt.name} using {video_path.name}")
+        return 0
 
     if first_url:
         try:
@@ -816,6 +870,11 @@ def main() -> None:
         "--force",
         action="store_true",
         help="Overwrite existing target/body/meta files if present",
+    )
+    parser.add_argument(
+        "--video",
+        default="",
+        help="Use an existing video for timestamps instead of downloading YouTube",
     )
     args = parser.parse_args()
     raise SystemExit(run(args))
