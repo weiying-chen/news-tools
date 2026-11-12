@@ -307,7 +307,7 @@ def _duration_from_cue(line: str) -> int | None:
     parenthetical_contents = re.findall(r"[（(]([^（）()]*)[）)]", stripped)
     for content in reversed(parenthetical_contents):
         dotted_duration = re.search(
-            r"(?:^|[.．。])\s*(\d{1,2})\s*[.．。]\s*\S",
+            r"(?:^|[.．。，,])\s*(\d{1,2})\s*[.．。，,]\s*\S",
             content,
         )
         if dotted_duration:
@@ -653,7 +653,9 @@ def transcribe(
         audio_inputs = [
             (
                 audio[
-                    max(0, round(start * sampling_rate)) : round(end * sampling_rate)
+                    max(0, round(start * sampling_rate)) : (
+                        None if math.isinf(end) else round(end * sampling_rate)
+                    )
                 ],
                 start,
             )
@@ -726,6 +728,8 @@ def verify_suspicious_vo_matches(
             start = 0.0
         if index + 1 < len(matches):
             end = max(end, matches[index + 1].start_seconds)
+        else:
+            end = math.inf
         ranges_by_line[match.passage.line_index] = (start, end)
     clip_ranges = _merge_clip_ranges(list(ranges_by_line.values()))
     fallback_segments = transcribe(
@@ -751,7 +755,13 @@ def verify_suspicious_vo_matches(
             and not candidate.timing_anomaly
             and candidate.score >= timing_repair_min_score
         )
-        if materially_improved or repaired_timing:
+        repaired_onset = (
+            not candidate.timing_anomaly
+            and candidate.score >= original.score
+            and candidate.score >= timing_repair_min_score
+            and abs(candidate.start_seconds - original.start_seconds) >= 0.5
+        )
+        if materially_improved or repaired_timing or repaired_onset:
             replacements[original.passage.line_index] = candidate
 
     return [replacements.get(match.passage.line_index, match) for match in matches]

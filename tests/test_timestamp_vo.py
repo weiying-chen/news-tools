@@ -35,6 +35,46 @@ class TimestampVoTest(unittest.TestCase):
         self.assertEqual(transcribe.call_args.kwargs['clip_ranges'], [(60, 100.0)])
         self.assertEqual(result[1].start_seconds, 74)
 
+    def test_weak_final_match_retries_through_end_of_video(self):
+        passage = timestamp_vo.VoPassage(2, '最後一段旁白', None)
+        matches = [
+            timestamp_vo.VoMatch(timestamp_vo.VoPassage(0, '前段旁白', None), 90, .9, 100),
+            timestamp_vo.VoMatch(passage, 103, .13, 106),
+        ]
+        segment = timestamp_vo.TranscriptSegment(132.66, 148.08, passage.text)
+        with mock.patch.object(timestamp_vo, 'transcribe', return_value=[segment]) as transcribe:
+            result = timestamp_vo.verify_suspicious_vo_matches(Path('video.mp4'), matches)
+
+        self.assertEqual(
+            transcribe.call_args.kwargs['clip_ranges'],
+            [(95.0, timestamp_vo.math.inf)],
+        )
+        self.assertEqual(result[1].start_seconds, 132.66)
+
+    def test_medium_recheck_can_repair_onset_without_large_score_gain(self):
+        passage = timestamp_vo.VoPassage(2, '十多年過去那分感動依舊在', None)
+        original = timestamp_vo.VoMatch(passage, 56.49, .763, 67.89)
+        candidate = timestamp_vo.VoMatch(passage, 59.50, .789, 68.14)
+
+        with (
+            mock.patch.object(
+                timestamp_vo,
+                'transcribe',
+                return_value=[timestamp_vo.TranscriptSegment(59.50, 68.14, passage.text)],
+            ),
+            mock.patch.object(
+                timestamp_vo,
+                'align_vo_passages',
+                return_value=[candidate],
+            ),
+        ):
+            result = timestamp_vo.verify_suspicious_vo_matches(
+                Path('video.mp4'),
+                [original],
+            )
+
+        self.assertEqual(result[0].start_seconds, 59.50)
+
     def test_extracts_vo_without_youtube_headline(self) -> None:
         body = "\n".join(
             [
@@ -637,6 +677,21 @@ class TimestampVoTest(unittest.TestCase):
         self.assertEqual(
             [block.duration_seconds for block in timestamp_vo.extract_super_blocks(body)],
             [12, 12, 13, 9],
+        )
+
+    def test_reads_duration_from_comma_named_cue(self) -> None:
+        body = "\n".join(
+            [
+                "(11，Lana Mahmoud Haidar AISwaferi)",
+                "/*SUPER:",
+                "加薩帳棚區學童｜拉娜//",
+                "*/",
+            ]
+        )
+
+        self.assertEqual(
+            [block.duration_seconds for block in timestamp_vo.extract_super_blocks(body)],
+            [11],
         )
 
     def test_preserves_duration_in_multiline_preceding_cue(self) -> None:
