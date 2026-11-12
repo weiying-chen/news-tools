@@ -264,6 +264,52 @@ def warn_timecode_mismatches(story_dir: Path, blocks: list[Block]) -> None:
         print(f"[warn] MP3 has no body timecode: {filename}")
 
 
+def reconcile_timecoded_mp3s(
+    story_dir: Path,
+    blocks: list[Block],
+    *,
+    apply: bool,
+) -> tuple[int, int]:
+    expected_by_ordinal: dict[str, list[str]] = {}
+    for block in blocks:
+        ordinal, _, _ = block.timecode.partition("_")
+        expected_by_ordinal.setdefault(ordinal, []).append(block.timecode)
+
+    actual_by_ordinal: dict[str, list[Path]] = {}
+    for path in story_dir.glob("*.mp3"):
+        if not path.is_file() or not TIMECODE_RE.fullmatch(path.stem):
+            continue
+        ordinal, _, _ = path.stem.partition("_")
+        actual_by_ordinal.setdefault(ordinal, []).append(path)
+
+    planned = 0
+    renamed = 0
+    for ordinal in sorted(expected_by_ordinal, key=int):
+        expected = expected_by_ordinal[ordinal]
+        actual = actual_by_ordinal.get(ordinal, [])
+        if len(expected) != 1 or len(actual) > 1:
+            print(f"[warn] ordinal {ordinal} is ambiguous; skipped")
+            continue
+        if not actual:
+            continue
+
+        src = actual[0]
+        dst = src.with_name(f"{expected[0]}.mp3")
+        if src == dst:
+            continue
+        if dst.exists():
+            print(f"[warn] {src.name}: target exists -> {dst.name}, skipped")
+            continue
+
+        planned += 1
+        print(f"[retime] {src.name} -> {dst.name} (ordinal {ordinal})")
+        if apply:
+            src.rename(dst)
+            renamed += 1
+
+    return planned, renamed
+
+
 def rename_with_blocks(
     story_dir: Path,
     blocks: list[Block],
@@ -284,19 +330,26 @@ def rename_with_blocks(
         print(f"[skip] {story_dir}: no mp3 files")
         return finish(0, 0)
 
+    print(f"\n[story] {story_dir}")
+    print(f"[source] {source_name} (timecodes source)")
+    planned, renamed = reconcile_timecoded_mp3s(
+        story_dir,
+        blocks,
+        apply=apply,
+    )
+    if apply and renamed:
+        mp3s = sorted(story_dir.glob("*.mp3"))
+
     # Only rename files that are not already in timecode format.
     todo = [p for p in mp3s if not TIMECODE_RE.match(p.stem)]
     if not todo:
-        print(f"[ok] {story_dir}: all mp3 already timecoded")
-        return finish(0, 0)
+        if not planned:
+            print(f"[ok] {story_dir}: all mp3 already timecoded")
+        return finish(planned, renamed)
 
-    print(f"\n[story] {story_dir}")
-    print(f"[source] {source_name} (timecodes source)")
     print(f"[info] parsed {len(blocks)} timecode blocks; {len(todo)} mp3 need rename")
 
     used_timecodes: set[str] = set()
-    planned = 0
-    renamed = 0
 
     for src in todo:
         cands = best_candidates(src.stem, blocks)

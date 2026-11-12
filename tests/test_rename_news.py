@@ -61,6 +61,29 @@ class RenameNewsBlocksTest(unittest.TestCase):
         self.assertIn('[warn] missing MP3 for timecode: 2_0035', output.getvalue())
         self.assertIn('[warn] MP3 has no body timecode: 3_0100.mp3', output.getvalue())
 
+    def test_timecoded_mp3_is_retimed_by_matching_ordinal(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            directory = Path(tmp_dir)
+            (directory / '1_0030.mp3').touch()
+            (directory / '2_0058.mp3').touch()
+            blocks = [
+                rename_module.Block('1_0030', ['First line']),
+                rename_module.Block('2_0100', ['Second line']),
+            ]
+
+            planned, renamed = rename_module.rename_with_blocks(
+                story_dir=directory,
+                blocks=blocks,
+                min_score=0.5,
+                apply=True,
+                source_name='body.txt',
+            )
+
+            self.assertFalse((directory / '2_0058.mp3').exists())
+            self.assertTrue((directory / '2_0100.mp3').exists())
+
+        self.assertEqual((planned, renamed), (1, 1))
+
     def test_one_letter_tail_is_truncated_after_long_matching_prefix(self) -> None:
         filename_tokens = 'volunteers bring winter supplies across the region c'.split()
         line_tokens = (
