@@ -42,15 +42,28 @@ selected explicitly.
 
 ## Download voiceovers
 
-Open NaturalReader in the dedicated Chrome profile used for news automation:
+Prepare the private Windows connector without accessing any running Chrome:
+
+```bash
+download-news --prepare
+```
+
+Before downloading, leave exactly one NaturalReader tab open in the desired
+logged-in Chrome instance and enable Remote Debugging at
+`chrome://inspect/#remote-debugging`. From the directory containing `body.txt`,
+run:
 
 ```bash
 download-news
 ```
 
-The profile remains separate from normal Chrome. Log in once in the opened
-window; later runs reuse it. The controllable Chrome instance uses debugging
-port `9222` by default.
+Chrome asks for permission before the command can access the browser. The
+command extracts only English VO blocks introduced by standalone four-digit
+timecodes, converts them through NaturalReader, and saves them as ordinal and
+timecode names such as `1_0021.mp3`. Existing destination MP3s are skipped. The
+command refuses zero or multiple matching NaturalReader tabs and does not
+launch another Chrome profile. Use `download-news --check` to verify the
+connection without changing the page or consuming conversion quota.
 
 ## Reference generator
 
