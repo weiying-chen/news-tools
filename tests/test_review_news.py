@@ -44,6 +44,24 @@ class ReviewNewsTest(unittest.TestCase):
             self.assertFalse(original.exists())
             self.assertTrue((directory / '1_0016.mp3').is_file())
 
+    def test_review_retimes_existing_mp3_from_body_ordinal(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            directory = Path(tmp_dir)
+            (directory / 'body.txt').write_text(
+                '0030\nFirst line\n0057\nSecond line\n0123\nThird line\n',
+                encoding='utf-8',
+            )
+            (directory / '1_0030.mp3').touch()
+            (directory / '2_0057.mp3').touch()
+            stale = directory / '3_0124.mp3'
+            stale.touch()
+
+            renamed = review_module.prepare_narration_files(directory)
+
+            self.assertEqual(renamed, 1)
+            self.assertFalse(stale.exists())
+            self.assertTrue((directory / '3_0123.mp3').is_file())
+
     def test_review_stops_when_body_timecodes_and_mp3s_do_not_match(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             directory = Path(tmp_dir)
