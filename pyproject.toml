@@ -14,6 +14,7 @@ dependencies = [
 
 [project.scripts]
 setup-news = "setup_news:main"
+download-news = "download_news:main"
 
 [tool.setuptools]
-py-modules = ["setup_news", "timestamp_vo"]
+py-modules = ["download_news", "setup_news", "timestamp_vo"]

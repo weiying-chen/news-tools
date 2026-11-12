@@ -40,6 +40,18 @@ workspace and rerun with `--force` before manually editing `body.txt` or `meta.t
 Use `--video` only when the workspace contains multiple videos and one must be
 selected explicitly.
 
+## Download voiceovers
+
+Open NaturalReader in the dedicated Chrome profile used for news automation:
+
+```bash
+download-news
+```
+
+The profile remains separate from normal Chrome. Log in once in the opened
+window; later runs reuse it. The controllable Chrome instance uses debugging
+port `9222` by default.
+
 ## Reference generator
 
 Rebuild the extracted, audited, and validated news references:
