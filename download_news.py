@@ -85,7 +85,11 @@ def control_uid(snapshot: str, accessible_name: str) -> str:
 
 
 def editor_uid(snapshot: str) -> str:
-    matches = re.findall(r'^\s*uid=(\S+)\s+generic\s+value=', snapshot, re.MULTILINE)
+    matches = re.findall(
+        r'^\s*uid=(\S+)\s+generic\b[^\n]*\bvalue=',
+        snapshot,
+        re.MULTILINE,
+    )
     if len(matches) != 1:
         raise ValueError(f"expected one text editor, found {len(matches)}")
     return matches[0]
@@ -94,7 +98,10 @@ def editor_uid(snapshot: str) -> str:
 @dataclass(frozen=True)
 class ConnectorPaths:
     root_wsl: Path
-    root_windows: PureWindowsPath
+    root_windows: Path | PureWindowsPath
+    node_path: Path | None = None
+    npm_path: Path | None = None
+    platform_name: str = "Windows"
 
     @classmethod
     def for_account(cls, drive: str, username: str) -> "ConnectorPaths":
@@ -104,9 +111,25 @@ class ConnectorPaths:
             PureWindowsPath(f"{drive.upper()}:/{relative.as_posix()}"),
         )
 
+    @classmethod
+    def for_linux(
+        cls,
+        home: Path,
+        node_path: Path,
+        npm_path: Path,
+    ) -> "ConnectorPaths":
+        root = home / ".local" / "share" / "news-tools-browser"
+        return cls(
+            root,
+            root,
+            node_path=node_path,
+            npm_path=npm_path,
+            platform_name="Linux",
+        )
+
     @property
     def node_exe(self) -> Path:
-        return self.root_wsl / "node" / "node.exe"
+        return self.node_path or self.root_wsl / "node" / "node.exe"
 
     @property
     def cli_script_wsl(self) -> Path:
@@ -123,7 +146,7 @@ class ConnectorPaths:
         )
 
     @property
-    def cli_script_windows(self) -> PureWindowsPath:
+    def cli_script_windows(self) -> Path | PureWindowsPath:
         return (
             self.root_windows
             / "node_modules"
@@ -161,8 +184,22 @@ def windows_account(path_env: str | None = None) -> tuple[str, str]:
     return drive.upper(), username
 
 
+def running_in_wsl() -> bool:
+    try:
+        release = Path("/proc/sys/kernel/osrelease").read_text(encoding="utf-8")
+    except OSError:
+        return False
+    return "microsoft" in release.casefold()
+
+
 def connector_paths() -> ConnectorPaths:
-    return ConnectorPaths.for_account(*windows_account())
+    if running_in_wsl():
+        return ConnectorPaths.for_account(*windows_account())
+    node = shutil.which("node")
+    npm = shutil.which("npm")
+    if not node or not npm:
+        raise RuntimeError("native Linux requires node and npm on PATH")
+    return ConnectorPaths.for_linux(Path.home(), Path(node), Path(npm))
 
 
 def _download(url: str, destination: Path) -> None:
@@ -180,9 +217,9 @@ def _expected_node_digest(shasums: str) -> str:
 
 
 def prepare_connector(paths: ConnectorPaths) -> None:
-    """Install a private Windows Node runtime and Chrome connector only."""
+    """Install the Chrome connector without accessing Chrome."""
     paths.root_wsl.mkdir(parents=True, exist_ok=True)
-    if not paths.node_exe.is_file():
+    if paths.platform_name == "Windows" and not paths.node_exe.is_file():
         node_dir = paths.root_wsl / "node"
         if node_dir.exists():
             raise RuntimeError(f"incomplete Node installation: {node_dir}")
@@ -208,8 +245,19 @@ def prepare_connector(paths: ConnectorPaths) -> None:
 
     if paths.cli_script_wsl.is_file():
         return
-    _run(
-        [
+    if paths.platform_name == "Linux":
+        if paths.npm_path is None:
+            raise RuntimeError("native Linux npm executable is not configured")
+        command = [
+            str(paths.npm_path),
+            "install",
+            "--prefix",
+            str(paths.root_wsl),
+            "--save-exact",
+            f"chrome-devtools-mcp@{CONNECTOR_VERSION}",
+        ]
+    else:
+        command = [
             str(paths.node_exe),
             str(paths.npm_cli_windows),
             "install",
@@ -218,7 +266,7 @@ def prepare_connector(paths: ConnectorPaths) -> None:
             "--save-exact",
             f"chrome-devtools-mcp@{CONNECTOR_VERSION}",
         ]
-    )
+    _run(command)
 
 
 def connector_command(
@@ -301,17 +349,31 @@ def _download_state(directory: Path) -> dict[Path, tuple[int, int]]:
     }
 
 
+def _partial_download_state(directory: Path) -> dict[Path, tuple[int, int]]:
+    return {
+        path: (path.stat().st_mtime_ns, path.stat().st_size)
+        for path in directory.glob("*.crdownload")
+        if path.is_file()
+    }
+
+
 def _wait_for_new_mp3(
     directory: Path,
     before: dict[Path, tuple[int, int]],
+    before_partials: dict[Path, tuple[int, int]],
     timeout: float = 30,
 ) -> Path:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         current = _download_state(directory)
         changed = [path for path, state in current.items() if before.get(path) != state]
-        partials = list(directory.glob("*.crdownload"))
-        if len(changed) == 1 and not partials:
+        current_partials = _partial_download_state(directory)
+        active_partials = [
+            path
+            for path, state in current_partials.items()
+            if before_partials.get(path) != state
+        ]
+        if len(changed) == 1 and not active_partials:
             return changed[0]
         if len(changed) > 1:
             raise RuntimeError("multiple new MP3 files appeared in Downloads")
@@ -330,6 +392,25 @@ def move_download(source: Path, destination: Path) -> None:
 
 def _snapshot(paths: ConnectorPaths, page_id: int) -> str:
     return run_cli(paths, "take_snapshot", str(page_id))
+
+
+def wait_for_editor_snapshot(
+    paths: ConnectorPaths,
+    page_id: int,
+    timeout: float = 10,
+) -> str:
+    """Wait for NaturalReader's reading view and editor to become available."""
+    deadline = time.monotonic() + timeout
+    while True:
+        snapshot = _snapshot(paths, page_id)
+        try:
+            editor_uid(snapshot)
+        except ValueError:
+            if time.monotonic() >= deadline:
+                raise ValueError("NaturalReader text editor did not become available")
+            time.sleep(0.25)
+            continue
+        return snapshot
 
 
 def _click(paths: ConnectorPaths, page_id: int, uid: str) -> None:
@@ -358,9 +439,9 @@ def download_voiceover(
     conversion_timeout: float = 120,
 ) -> None:
     """Replace NaturalReader text, convert it, and save one timestamped MP3."""
-    snapshot = _snapshot(paths, page_id)
+    snapshot = wait_for_editor_snapshot(paths, page_id)
     if close_conversion_dialog(paths, page_id, snapshot):
-        snapshot = _snapshot(paths, page_id)
+        snapshot = wait_for_editor_snapshot(paths, page_id)
     run_cli(paths, "fill", str(page_id), editor_uid(snapshot), voiceover.text)
 
     snapshot = _snapshot(paths, page_id)
@@ -380,8 +461,9 @@ def download_voiceover(
         time.sleep(0.5)
 
     before = _download_state(downloads)
+    before_partials = _partial_download_state(downloads)
     _click(paths, page_id, control_uid(snapshot, "Download"))
-    downloaded = _wait_for_new_mp3(downloads, before)
+    downloaded = _wait_for_new_mp3(downloads, before, before_partials)
     if destination.exists():
         raise FileExistsError(destination)
     move_download(downloaded, destination)
@@ -402,7 +484,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--prepare",
         action="store_true",
-        help="Install the private Windows connector without accessing Chrome",
+        help="Install the browser connector without accessing Chrome",
     )
     parser.add_argument(
         "--check",
@@ -427,7 +509,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         except (OSError, RuntimeError, subprocess.SubprocessError) as error:
             print(f"[error] could not prepare browser connector: {error}")
             return 1
-        print("[prepared] Windows browser connector; Chrome was not accessed")
+        print(f"[prepared] {paths.platform_name} browser connector; Chrome was not accessed")
         return 0
     if not paths.is_prepared():
         print("[error] browser connector is not prepared; run download-news --prepare")

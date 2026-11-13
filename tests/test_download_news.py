@@ -72,6 +72,23 @@ Da Ai TV reports.
 
         self.assertEqual(download_news.editor_uid(snapshot), "1_40")
 
+    def test_waits_for_editor_to_appear(self):
+        paths = mock.Mock()
+        snapshots = iter(
+            [
+                'uid=1_1 button "NaturalReader home"',
+                'uid=1_40 generic focusable value="Existing text"',
+            ]
+        )
+        with (
+            mock.patch.object(download_news, "_snapshot", side_effect=snapshots),
+            mock.patch.object(download_news.time, "sleep") as sleep,
+        ):
+            snapshot = download_news.wait_for_editor_snapshot(paths, 7, timeout=1)
+
+        self.assertIn("uid=1_40", snapshot)
+        sleep.assert_called_once_with(0.25)
+
     def test_moves_download_across_filesystems(self):
         source = mock.Mock(spec=Path)
         source.replace.side_effect = OSError(errno.EXDEV, "cross-device link")
@@ -80,6 +97,24 @@ Da Ai TV reports.
             download_news.move_download(source, destination)
 
         move.assert_called_once_with(str(source), str(destination))
+
+    def test_ignores_stale_partial_downloads(self):
+        with tempfile.TemporaryDirectory() as temp_name:
+            downloads = Path(temp_name)
+            (downloads / "old.crdownload").write_bytes(b"stale")
+            before = download_news._download_state(downloads)
+            before_partials = download_news._partial_download_state(downloads)
+            completed = downloads / "voiceover.mp3"
+            completed.write_bytes(b"audio")
+
+            result = download_news._wait_for_new_mp3(
+                downloads,
+                before,
+                before_partials,
+                timeout=0.1,
+            )
+
+        self.assertEqual(result, completed)
 
     def test_closes_stale_conversion_dialog(self):
         snapshot = 'uid=4_4 button "convert cancel button"'
@@ -110,6 +145,59 @@ Da Ai TV reports.
         self.assertEqual(command[1], str(paths.cli_script_windows))
         self.assertEqual(command[2:], ["list_pages", "--output-format=json"])
         self.assertEqual(paths.downloads_wsl, Path("/mnt/c/Users/026422/Downloads"))
+
+    def test_builds_native_linux_connector_command(self):
+        paths = download_news.ConnectorPaths.for_linux(
+            Path("/home/reporter"),
+            Path("/usr/bin/node"),
+            Path("/usr/bin/npm"),
+        )
+
+        command = download_news.connector_command(paths, "list_pages")
+
+        self.assertEqual(command[0], "/usr/bin/node")
+        self.assertEqual(command[1], str(paths.cli_script_wsl))
+        self.assertEqual(command[2:], ["list_pages", "--output-format=json"])
+        self.assertEqual(paths.downloads_wsl, Path("/home/reporter/Downloads"))
+
+    def test_selects_native_linux_paths_outside_wsl(self):
+        with (
+            mock.patch.object(download_news, "running_in_wsl", return_value=False),
+            mock.patch.object(download_news.Path, "home", return_value=Path("/home/reporter")),
+            mock.patch.object(
+                download_news.shutil,
+                "which",
+                side_effect=lambda command: f"/usr/bin/{command}",
+            ),
+        ):
+            paths = download_news.connector_paths()
+
+        self.assertEqual(paths.node_exe, Path("/usr/bin/node"))
+        self.assertEqual(paths.downloads_wsl, Path("/home/reporter/Downloads"))
+
+    def test_prepares_native_linux_connector_with_npm(self):
+        paths = download_news.ConnectorPaths.for_linux(
+            Path("/home/reporter"),
+            Path("/usr/bin/node"),
+            Path("/usr/bin/npm"),
+        )
+        with (
+            mock.patch.object(download_news.Path, "mkdir"),
+            mock.patch.object(download_news.Path, "is_file", return_value=False),
+            mock.patch.object(download_news, "_run") as run,
+        ):
+            download_news.prepare_connector(paths)
+
+        run.assert_called_once_with(
+            [
+                "/usr/bin/npm",
+                "install",
+                "--prefix",
+                "/home/reporter/.local/share/news-tools-browser",
+                "--save-exact",
+                "chrome-devtools-mcp@1.13.0",
+            ]
+        )
 
     def test_requires_exactly_one_naturalreader_page(self):
         pages = [

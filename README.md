@@ -42,11 +42,16 @@ selected explicitly.
 
 ## Download voiceovers
 
-Prepare the private Windows connector without accessing any running Chrome:
+Prepare the browser connector without accessing any running Chrome:
 
 ```bash
 download-news --prepare
 ```
+
+On native Linux this installs the connector under
+`~/.local/share/news-tools-browser` using Node and npm from `PATH`, and watches
+`~/Downloads` for completed MP3 files. Under WSL it continues to use the
+private Windows Node connector and the Windows Downloads folder.
 
 Before downloading, leave exactly one NaturalReader tab open in the desired
 logged-in Chrome instance and enable Remote Debugging at
