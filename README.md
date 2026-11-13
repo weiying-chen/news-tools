@@ -70,6 +70,28 @@ command refuses zero or multiple matching NaturalReader tabs and does not
 launch another Chrome profile. Use `download-news --check` to verify the
 connection without changing the page or consuming conversion quota.
 
+## Upload completed news
+
+With the supplied company Drive folder open in the approved Chrome instance,
+verify navigation to the latest year and month without uploading:
+
+```bash
+upload-news --check
+```
+
+Upload only explicitly named files or folders:
+
+```bash
+upload-news main.docx meta.docx
+upload-news ./completed-story
+```
+
+The command navigates to `大愛每日英語新聞/翻譯完成稿`, selects the
+numerically latest year and month folders, and verifies that Drive reports the
+upload. Folder arguments use Drive's `Folder upload` action and preserve their
+contents. It uses the existing logged-in Chrome session and does not use Drive
+API credentials.
+
 ## Reference generator
 
 Rebuild the extracted, audited, and validated news references:

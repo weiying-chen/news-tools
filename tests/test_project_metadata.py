@@ -19,8 +19,13 @@ class ProjectMetadataTest(unittest.TestCase):
             metadata["project"]["scripts"]["download-news"],
             "download_news:main",
         )
+        self.assertEqual(
+            metadata["project"]["scripts"]["upload-news"],
+            "upload_news:main",
+        )
         self.assertIn("setup_news", metadata["tool"]["setuptools"]["py-modules"])
         self.assertIn("timestamp_vo", metadata["tool"]["setuptools"]["py-modules"])
+        self.assertIn("upload_news", metadata["tool"]["setuptools"]["py-modules"])
 
 
 if __name__ == "__main__":
