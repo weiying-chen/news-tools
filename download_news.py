@@ -456,7 +456,6 @@ def main(argv: Sequence[str] | None = None) -> int:
             if destination.exists():
                 print(f"[skip] {voiceover.filename}")
                 continue
-            print(f"[convert] {voiceover.filename}")
             download_voiceover(
                 paths,
                 page_id,

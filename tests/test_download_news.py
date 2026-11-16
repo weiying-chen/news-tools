@@ -190,6 +190,7 @@ Da Ai TV reports.
                 mock.patch.object(download_news, "run_connector", return_value=pages),
                 mock.patch.object(download_news, "stop_connector"),
                 mock.patch.object(download_news, "download_voiceover") as download,
+                mock.patch("builtins.print") as output,
             ):
                 result = download_news.main(
                     ["--body", str(body), "--output", str(root)]
@@ -198,6 +199,9 @@ Da Ai TV reports.
         self.assertEqual(result, 0)
         self.assertEqual(download.call_count, 1)
         self.assertEqual(download.call_args.args[2].filename, "2_0038.mp3")
+        messages = [str(call.args[0]) for call in output.call_args_list]
+        self.assertFalse(any(message.startswith("[convert]") for message in messages))
+        self.assertTrue(any(message.startswith("[downloaded]") for message in messages))
 
 
 if __name__ == "__main__":
