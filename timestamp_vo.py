@@ -287,8 +287,8 @@ def align_vo_passages(
     return matches
 
 def _format_timecode(seconds: float) -> str:
-    containing_second = math.floor(seconds)
-    minutes, remaining_seconds = divmod(containing_second, 60)
+    nearest_second = math.floor(seconds + 0.5 + 1e-9)
+    minutes, remaining_seconds = divmod(nearest_second, 60)
     return f"{minutes:02d}{remaining_seconds:02d}"
 
 
@@ -702,6 +702,55 @@ def transcribe(
     return segments
 
 
+def refine_vo_match_timings(
+    video_path: Path,
+    matches: Sequence[VoMatch],
+    *,
+    model_name: str = "small",
+    timing_min_score: float = 0.65,
+) -> list[VoMatch]:
+    """Recheck every VO onset in an independently decoded local clip."""
+    if not matches:
+        return []
+
+    ranges: list[list[float]] = [
+        [
+            max(0.0, match.start_seconds - 8.0),
+            (match.end_seconds or match.start_seconds) + 3.0,
+        ]
+        for match in matches
+    ]
+    # Keep clips separate so each one gets fresh Whisper context while avoiding
+    # duplicate transcript segments in the flattened result.
+    for index in range(len(matches) - 1):
+        current_end = matches[index].end_seconds or matches[index].start_seconds
+        boundary = (current_end + matches[index + 1].start_seconds) / 2
+        ranges[index][1] = min(ranges[index][1], boundary)
+        ranges[index + 1][0] = max(ranges[index + 1][0], boundary)
+
+    clip_ranges = [(start, end) for start, end in ranges]
+    focused_segments = transcribe(
+        video_path,
+        model_name,
+        clip_ranges=clip_ranges,
+    )
+
+    replacements: dict[int, VoMatch] = {}
+    for original, (clip_start, clip_end) in zip(matches, clip_ranges):
+        local_segments = [
+            segment
+            for segment in focused_segments
+            if segment.end > clip_start and segment.start < clip_end
+        ]
+        if not local_segments:
+            continue
+        candidate = align_vo_passages([original.passage], local_segments)[0]
+        if candidate.score >= timing_min_score and not candidate.timing_anomaly:
+            replacements[original.passage.line_index] = candidate
+
+    return [replacements.get(match.passage.line_index, match) for match in matches]
+
+
 def verify_suspicious_vo_matches(
     video_path: Path,
     matches: Sequence[VoMatch],
@@ -794,6 +843,7 @@ def timestamp_body(
     segments = transcribe(video_path, model_name)
     matches = align_vo_passages(passages, segments)
     if model_name == "small":
+        matches = refine_vo_match_timings(video_path, matches, model_name=model_name)
         matches = verify_suspicious_vo_matches(video_path, matches, min_score=min_score)
     weak = [match for match in matches if match.score < min_score]
     if weak:

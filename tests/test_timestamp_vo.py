@@ -206,7 +206,7 @@ class TimestampVoTest(unittest.TestCase):
         match = timestamp_vo.align_vo_passages([passage], [segment])[0]
 
         self.assertEqual(match.start_seconds, 98.55)
-        self.assertEqual(timestamp_vo._format_timecode(match.start_seconds), "0138")
+        self.assertEqual(timestamp_vo._format_timecode(match.start_seconds), "0139")
 
     def test_unreliable_opening_word_uses_first_reliable_word(self) -> None:
         passage = timestamp_vo.VoPassage(0, "表哥的鼓勵", None)
@@ -346,18 +346,44 @@ class TimestampVoTest(unittest.TestCase):
 
         self.assertEqual(rendered, "0020\n第一段旁白。\nFirst narration.\n")
 
-    def test_timestamp_uses_second_containing_detected_onset(self) -> None:
+    def test_timestamp_rounds_detected_onset_to_nearest_second(self) -> None:
         self.assertEqual(timestamp_vo._format_timecode(14.30), "0014")
-        self.assertEqual(timestamp_vo._format_timecode(75.52), "0115")
+        self.assertEqual(timestamp_vo._format_timecode(75.52), "0116")
         self.assertEqual(timestamp_vo._format_timecode(98.00), "0138")
         self.assertEqual(timestamp_vo._format_timecode(98.01), "0138")
         self.assertEqual(timestamp_vo._format_timecode(98.20), "0138")
         self.assertEqual(timestamp_vo._format_timecode(98.21), "0138")
         self.assertEqual(timestamp_vo._format_timecode(98.49), "0138")
-        self.assertEqual(timestamp_vo._format_timecode(98.50), "0138")
-        self.assertEqual(timestamp_vo._format_timecode(98.99), "0138")
-        self.assertEqual(timestamp_vo._format_timecode(37.86), "0037")
+        self.assertEqual(timestamp_vo._format_timecode(98.50), "0139")
+        self.assertEqual(timestamp_vo._format_timecode(98.99), "0139")
+        self.assertEqual(timestamp_vo._format_timecode(37.86), "0038")
         self.assertEqual(timestamp_vo._format_timecode(59.01), "0059")
+        self.assertEqual(timestamp_vo._format_timecode(54.49999999999999), "0055")
+
+    def test_focused_recheck_repairs_high_scoring_early_onset(self) -> None:
+        passage = timestamp_vo.VoPassage(0, "這分情誼十年不變", None)
+        original = timestamp_vo.VoMatch(passage, 104.2, 0.89, 107.1)
+        focused = [
+            timestamp_vo.TranscriptSegment(105.2, 107.1, passage.text),
+        ]
+
+        with mock.patch.object(
+            timestamp_vo,
+            "transcribe",
+            return_value=focused,
+        ) as transcribe:
+            result = timestamp_vo.refine_vo_match_timings(
+                Path("video.mp4"),
+                [original],
+            )
+
+        self.assertEqual(result[0].start_seconds, 105.2)
+        self.assertEqual(timestamp_vo._format_timecode(result[0].start_seconds), "0145")
+        transcribe.assert_called_once_with(
+            Path("video.mp4"),
+            "small",
+            clip_ranges=[(96.2, 110.1)],
+        )
 
     def test_removes_existing_timecodes_for_live_regeneration(self) -> None:
         body = "0018\n第一段旁白。\n\n0043\n第二段旁白。\n"
@@ -385,7 +411,13 @@ class TimestampVoTest(unittest.TestCase):
                 body_path.read_text(encoding="utf-8"),
                 "0017\n第一段旁白。\nFirst narration.\n",
             )
-            transcribe.assert_called_once_with(video_path, "small")
+            self.assertEqual(transcribe.call_count, 2)
+            transcribe.assert_any_call(video_path, "small")
+            transcribe.assert_any_call(
+                video_path,
+                "small",
+                clip_ranges=[(9.2, 24.0)],
+            )
 
     def test_timestamp_body_rechecks_suspicious_match_with_medium(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -414,16 +446,16 @@ class TimestampVoTest(unittest.TestCase):
             with mock.patch.object(
                 timestamp_vo,
                 "transcribe",
-                side_effect=[small_segments, medium_segments],
+                side_effect=[small_segments, small_segments, medium_segments],
             ) as transcribe:
                 matches = timestamp_vo.timestamp_body(body_path, video_path)
 
             self.assertEqual(matches[0].start_seconds, 51.98)
-            self.assertTrue(body_path.read_text(encoding="utf-8").startswith("0051\n"))
-            self.assertEqual(transcribe.call_count, 2)
-            self.assertEqual(transcribe.call_args_list[1].args[:2], (video_path, "medium"))
+            self.assertTrue(body_path.read_text(encoding="utf-8").startswith("0052\n"))
+            self.assertEqual(transcribe.call_count, 3)
+            self.assertEqual(transcribe.call_args_list[2].args[:2], (video_path, "medium"))
             self.assertEqual(
-                transcribe.call_args_list[1].kwargs,
+                transcribe.call_args_list[2].kwargs,
                 {"clip_ranges": [(46.46, 60.36)]},
             )
 
@@ -452,12 +484,12 @@ class TimestampVoTest(unittest.TestCase):
             with mock.patch.object(
                 timestamp_vo,
                 "transcribe",
-                side_effect=[small_segments, medium_segments],
+                side_effect=[small_segments, small_segments, medium_segments],
             ) as transcribe:
                 matches = timestamp_vo.timestamp_body(body_path, video_path)
 
             self.assertEqual(matches[0].start_seconds, 216.92)
-            self.assertEqual(transcribe.call_count, 2)
+            self.assertEqual(transcribe.call_count, 3)
 
     def test_adds_missing_single_super_duration_between_vo_passages(self) -> None:
         body = "\n".join(
