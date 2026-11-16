@@ -296,6 +296,12 @@ def _duration_from_cue(line: str) -> int | None:
     stripped = line.strip()
     if re.fullmatch(r"\d{1,2}", stripped):
         return int(stripped)
+    formatted_seconds = re.fullmatch(
+        r"[（(]\s*(\d{1,3})\s*[sS]\s*[）)]",
+        stripped,
+    )
+    if formatted_seconds:
+        return int(formatted_seconds.group(1))
     explicit_seconds = re.findall(
         r"[（(][^（）()]*?(\d{1,3})\s*秒[^（）()]*[）)]",
         stripped,
@@ -355,8 +361,15 @@ def extract_super_blocks(body: str) -> list[SuperBlock]:
             following_line = lines[following].strip()
             if TIMECODE_RE.fullmatch(following_line) or following_line.startswith("/*"):
                 break
+            formatted_duration = re.fullmatch(
+                r"[（(]\s*(\d{1,3})\s*[sS]\s*[）)]",
+                following_line,
+            )
             if re.fullmatch(r"\d{1,2}", following_line):
                 following_duration = int(following_line)
+                break
+            if formatted_duration:
+                following_duration = int(formatted_duration.group(1))
                 break
             following += 1
         preceding_duration = (
@@ -597,7 +610,7 @@ def render_timestamped_body(
     }
     output: list[str] = []
     durations_by_line = {
-        duration.line_index: str(duration.seconds) for duration in super_durations
+        duration.line_index: f"({duration.seconds}s)" for duration in super_durations
     }
     for index, line in enumerate(body.splitlines()):
         if index in insertions:

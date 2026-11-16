@@ -499,7 +499,7 @@ class TimestampVoTest(unittest.TestCase):
 
         self.assertEqual(warnings, [])
         self.assertEqual([(item.line_index, item.seconds) for item in durations], [(6, 7)])
-        self.assertIn("\n*/\n7\n", rendered)
+        self.assertIn("\n*/\n(7s)\n", rendered)
 
     def test_uses_vo_anchor_gap_when_single_super_has_no_transcript(self) -> None:
         body = "\n".join(
@@ -693,6 +693,22 @@ class TimestampVoTest(unittest.TestCase):
         self.assertEqual(
             [block.duration_seconds for block in timestamp_vo.extract_super_blocks(body)],
             [11],
+        )
+
+    def test_reads_formatted_duration_after_super(self) -> None:
+        body = "\n".join(
+            [
+                "/*SUPER:",
+                "觀眾｜//",
+                "訪問內容//",
+                "*/",
+                "(25s)",
+            ]
+        )
+
+        self.assertEqual(
+            [block.duration_seconds for block in timestamp_vo.extract_super_blocks(body)],
+            [25],
         )
 
     def test_preserves_duration_in_multiline_preceding_cue(self) -> None:
