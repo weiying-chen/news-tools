@@ -21,6 +21,51 @@ upload_news = load_module("upload_news", MODULE_PATH)
 
 
 class UploadNewsTest(unittest.TestCase):
+    def test_defaults_to_shared_drives_root(self):
+        args = upload_news.build_parser().parse_args(["--check"])
+
+        self.assertEqual(args.root_url, upload_news.SHARED_DRIVES_ROOT_URL)
+
+    def test_accepts_my_drive_root(self):
+        args = upload_news.validate_args(
+            upload_news.build_parser().parse_args(
+                [
+                    "--check",
+                    "--root-url",
+                    "https://drive.google.com/drive/u/0/my-drive",
+                ]
+            )
+        )
+
+        self.assertEqual(
+            args.root_url,
+            "https://drive.google.com/drive/u/0/my-drive",
+        )
+
+    def test_rejects_non_drive_root(self):
+        args = upload_news.build_parser().parse_args(
+            ["--check", "--root-url", "https://example.com/not-drive"]
+        )
+
+        with self.assertRaisesRegex(ValueError, "Google Drive URL"):
+            upload_news.validate_args(args)
+
+    def test_finds_news_drive_as_a_row(self):
+        snapshot = 'uid=1_7 row "大愛每日英語新聞 共用雲端硬碟" selectable'
+
+        self.assertEqual(
+            upload_news.named_drive_item(snapshot, "大愛每日英語新聞"),
+            ("1_7", True),
+        )
+
+    def test_finds_news_drive_as_a_link(self):
+        snapshot = 'uid=1_7 link "大愛每日英語新聞"'
+
+        self.assertEqual(
+            upload_news.named_drive_item(snapshot, "大愛每日英語新聞"),
+            ("1_7", False),
+        )
+
     def test_finds_named_drive_row(self):
         snapshot = (
             'uid=1_58 row "翻譯完成稿 共用資料夾 上次修改日期 11月1日" selectable'

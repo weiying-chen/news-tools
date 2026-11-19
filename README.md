@@ -72,11 +72,19 @@ connection without changing the page or consuming conversion quota.
 
 ## Upload completed news
 
-With the supplied company Drive folder open in the approved Chrome instance,
+With Google Drive open in the approved Chrome instance,
 verify navigation to the latest year and month without uploading:
 
 ```bash
 upload-news --check
+```
+
+The Shared Drives page is the default starting point. To test the identical
+folder hierarchy in personal My Drive, override only the root:
+
+```bash
+upload-news --root-url "https://drive.google.com/drive/u/0/my-drive" --check
+upload-news --root-url "https://drive.google.com/drive/u/0/my-drive" ./upload-test
 ```
 
 Upload only explicitly named files or folders:
@@ -86,7 +94,8 @@ upload-news main.docx meta.docx
 upload-news ./completed-story
 ```
 
-The command navigates to `大愛每日英語新聞/翻譯完成稿`, selects the
+The command navigates from the selected root to
+`大愛每日英語新聞/翻譯完成稿`, selects the
 numerically latest year and month folders, and verifies that Drive reports the
 upload. Folder arguments use Drive's `Folder upload` action and preserve their
 contents. It uses the existing logged-in Chrome session and does not use Drive

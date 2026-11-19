@@ -9,13 +9,12 @@ import subprocess
 import time
 from pathlib import Path
 from typing import Callable, Sequence
+from urllib.parse import urlsplit
 
 import download_news
 
 
-START_FOLDER_URL = (
-    "https://drive.google.com/drive/folders/1jK5oZcGMcRQVjMN049Gi6JsjJYtKQwnS"
-)
+SHARED_DRIVES_ROOT_URL = "https://drive.google.com/drive/shared-drives"
 NEWS_DRIVE_NAME = "大愛每日英語新聞"
 COMPLETED_FOLDER_NAME = "翻譯完成稿"
 
@@ -72,8 +71,18 @@ def accessible_uid(snapshot: str, role: str, names: Sequence[str]) -> str:
     raise ValueError(f"could not find {role} named one of {list(names)!r}")
 
 
-def select_drive_page(pages: Sequence[dict[str, object]]) -> dict[str, object]:
-    preferred = [page for page in pages if page.get("url") == START_FOLDER_URL]
+def named_drive_item(snapshot: str, name: str) -> tuple[str, bool]:
+    try:
+        return accessible_uid(snapshot, "link", [name]), False
+    except ValueError:
+        return named_row_uid(snapshot, name), True
+
+
+def select_drive_page(
+    pages: Sequence[dict[str, object]],
+    root_url: str = SHARED_DRIVES_ROOT_URL,
+) -> dict[str, object]:
+    preferred = [page for page in pages if page.get("url") == root_url]
     if len(preferred) == 1:
         return preferred[0]
     news_pages = [
@@ -156,13 +165,14 @@ def _open_row(
 def navigate_to_latest_month(
     paths: download_news.ConnectorPaths,
     page_id: int,
+    root_url: str = SHARED_DRIVES_ROOT_URL,
 ) -> tuple[int, int]:
     download_news.run_cli(
         paths,
         "navigate_page",
         str(page_id),
         "--type=url",
-        f"--url={START_FOLDER_URL}",
+        f"--url={root_url}",
     )
     snapshot = wait_for_snapshot(
         paths,
@@ -170,8 +180,9 @@ def navigate_to_latest_month(
         lambda value: NEWS_DRIVE_NAME in value,
         NEWS_DRIVE_NAME,
     )
-    drive_link = accessible_uid(snapshot, "link", [NEWS_DRIVE_NAME])
-    download_news.run_cli(paths, "click", str(page_id), drive_link)
+    drive_uid, double_click = named_drive_item(snapshot, NEWS_DRIVE_NAME)
+    click_options = ["--dblClick=true"] if double_click else []
+    download_news.run_cli(paths, "click", str(page_id), drive_uid, *click_options)
 
     snapshot = wait_for_snapshot(
         paths,
@@ -274,6 +285,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("paths", nargs="*", type=Path)
     parser.add_argument(
+        "--root-url",
+        default=SHARED_DRIVES_ROOT_URL,
+        help="Drive root containing the news folder (default: Shared Drives)",
+    )
+    parser.add_argument(
         "--check",
         action="store_true",
         help="Navigate to and report the destination without uploading",
@@ -284,6 +300,9 @@ def build_parser() -> argparse.ArgumentParser:
 def validate_args(args: argparse.Namespace) -> argparse.Namespace:
     if not args.check and not args.paths:
         raise ValueError("provide at least one file or folder to upload, or use --check")
+    root = urlsplit(args.root_url)
+    if root.scheme != "https" or root.hostname != "drive.google.com" or not root.path.startswith("/drive/"):
+        raise ValueError("--root-url must be a Google Drive URL")
     args.paths = [path.expanduser().resolve() for path in args.paths]
     missing = [path for path in args.paths if not path.exists()]
     if missing:
@@ -309,9 +328,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         start_upload_connector(paths, args.paths)
         started = True
-        page = select_drive_page(download_news.run_connector(paths))
+        page = select_drive_page(download_news.run_connector(paths), args.root_url)
         page_id = int(page["id"])
-        year, month = navigate_to_latest_month(paths, page_id)
+        year, month = navigate_to_latest_month(paths, page_id, args.root_url)
         print(f"[destination] {NEWS_DRIVE_NAME}/{COMPLETED_FOLDER_NAME}/{year}年/{year}.{month}月")
         if args.check:
             return 0
