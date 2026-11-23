@@ -463,6 +463,45 @@ def build_windows_center_command(
     ]
 
 
+WINDOWS_STOP_SCRIPT = r"""
+Add-Type @'
+using System;
+using System.Runtime.InteropServices;
+public static class ReviewNewsStopNative {
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    public static extern IntPtr FindWindow(string className, string windowName);
+    [DllImport("user32.dll")]
+    public static extern uint GetWindowThreadProcessId(
+        IntPtr window, out uint processId);
+}
+'@
+$title = $args[0]
+$window = [ReviewNewsStopNative]::FindWindow($null, $title)
+if ($window -eq [IntPtr]::Zero) { exit 0 }
+$targetProcessId = [uint32]0
+[void][ReviewNewsStopNative]::GetWindowThreadProcessId(
+    $window, [ref]$targetProcessId)
+if ($targetProcessId -ne 0) {
+    Stop-Process -Id $targetProcessId -Force -ErrorAction SilentlyContinue
+}
+""".strip()
+
+
+def build_windows_stop_command(
+    *,
+    powershell: str,
+    window_title: str,
+) -> list[str]:
+    return [
+        powershell,
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        WINDOWS_STOP_SCRIPT,
+        window_title,
+    ]
+
+
 def running_in_wsl() -> bool:
     return "microsoft" in platform.release().lower()
 
@@ -532,6 +571,16 @@ def play_video(
         )
         return_code = player.wait()
     except KeyboardInterrupt:
+        subprocess.run(
+            build_windows_stop_command(
+                powershell=powershell,
+                window_title=window_title,
+            ),
+            check=False,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
         player.terminate()
         try:
             player.wait(timeout=5)

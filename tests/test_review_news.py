@@ -252,6 +252,21 @@ class ReviewNewsTest(unittest.TestCase):
         self.assertIn('new IntPtr(-2)', script)
         self.assertIn('SystemParametersInfo', script)
 
+    def test_windows_stop_command_terminates_named_window_process(self) -> None:
+        command = review_module.build_windows_stop_command(
+            powershell='powershell.exe',
+            window_title='review-news-123',
+        )
+
+        self.assertEqual(command[:3], [
+            'powershell.exe', '-NoProfile', '-NonInteractive',
+        ])
+        self.assertEqual(command[-1], 'review-news-123')
+        script = command[command.index('-Command') + 1]
+        self.assertIn('FindWindow', script)
+        self.assertIn('GetWindowThreadProcessId', script)
+        self.assertIn('Stop-Process', script)
+
     def test_wsl_center_helper_does_not_share_mpv_terminal(self) -> None:
         player = mock.Mock()
         player.wait.return_value = 0
@@ -321,7 +336,7 @@ class ReviewNewsTest(unittest.TestCase):
             mock.patch.object(review_module, 'to_windows_path', side_effect=lambda path: str(path)),
             mock.patch.object(review_module.shutil, 'which', return_value='powershell.exe'),
             mock.patch.object(review_module.subprocess, 'Popen', return_value=player),
-            mock.patch.object(review_module.subprocess, 'run'),
+            mock.patch.object(review_module.subprocess, 'run') as run,
         ):
             with self.assertRaises(KeyboardInterrupt):
                 review_module.play_video(
@@ -332,6 +347,10 @@ class ReviewNewsTest(unittest.TestCase):
                     input_config=Path('/cache/input.conf'),
                 )
 
+        stop_command = run.call_args_list[1].args[0]
+        stop_script = stop_command[stop_command.index('-Command') + 1]
+        self.assertIn('GetWindowThreadProcessId', stop_script)
+        self.assertRegex(stop_command[-1], r'^review-news-\d+$')
         player.terminate.assert_called_once_with()
         self.assertEqual(player.wait.call_args_list, [mock.call(), mock.call(timeout=5)])
 
