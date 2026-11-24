@@ -495,10 +495,30 @@ def infer_missing_super_durations(
         grouped.setdefault(key, []).append(block)
 
     durations: list[SuperDuration] = []
-    warnings = [
-        f"SUPER ending on line {block.end_line_index + 1} has no surrounding VO anchors"
-        for block in unbounded
-    ]
+    warnings: list[str] = []
+    if unbounded:
+        first_unbounded = unbounded[0]
+        previous_matches = [
+            match
+            for match in ordered_matches
+            if match.passage.line_index < first_unbounded.start_line_index
+            and match.end_seconds is not None
+        ]
+        lower = previous_matches[-1].end_seconds if previous_matches else 0.0
+        assert lower is not None
+        remaining_speech = [
+            segment for segment in segments if segment.start >= lower - 0.2
+        ]
+        matched, unresolved = _match_consecutive_super_durations(
+            body,
+            unbounded,
+            remaining_speech,
+        )
+        durations.extend(matched)
+        warnings.extend(
+            f"SUPER ending on line {block.end_line_index + 1} has no following VO anchor and could not be aligned"
+            for block in unresolved
+        )
     all_blocks = extract_super_blocks(body)
     for (previous_index, following_index), missing_blocks in grouped.items():
         following_match = ordered_matches[following_index]

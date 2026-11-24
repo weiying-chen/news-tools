@@ -592,6 +592,48 @@ class TimestampVoTest(unittest.TestCase):
         self.assertEqual(warnings, [])
         self.assertEqual([(item.line_index, item.seconds) for item in durations], [(3, 18)])
 
+    def test_adds_missing_super_duration_after_final_vo_before_report(self) -> None:
+        body = "\n".join(
+            [
+                "0224",
+                "最後一段旁白。",
+                "",
+                "/*SUPER:",
+                "澳洲慈濟志工｜高敬堯//",
+                "不論是在非洲或者世界各地//",
+                "慈濟的青年志工 我們的社區志工//",
+                "都可以做到防災預警的動作//",
+                "*/",
+                "",
+                "/*REPORT:",
+                "土耳其報導｜記者//",
+                "*/",
+            ]
+        )
+        passages = timestamp_vo.extract_vo_passages(body)
+        matches = [
+            timestamp_vo.VoMatch(passages[0], 144.0, 0.9, end_seconds=165.0),
+        ]
+        segments = [
+            timestamp_vo.TranscriptSegment(144.0, 165.0, "最後一段旁白"),
+            timestamp_vo.TranscriptSegment(165.5, 168.0, "不論是在非洲或者世界各地"),
+            timestamp_vo.TranscriptSegment(168.0, 170.2, "慈濟的青年志工我們的社區志工"),
+            timestamp_vo.TranscriptSegment(170.2, 173.9, "都可以做到防災預警的動作"),
+            timestamp_vo.TranscriptSegment(174.0, 176.0, "土耳其報導"),
+        ]
+
+        durations, warnings = timestamp_vo.infer_missing_super_durations(
+            body,
+            matches,
+            segments,
+        )
+
+        self.assertEqual(warnings, [])
+        self.assertEqual(
+            [(item.line_index, item.seconds) for item in durations],
+            [(8, 8)],
+        )
+
     def test_preserves_super_with_duration_in_preceding_cue(self) -> None:
         body = "\n".join(
             [
