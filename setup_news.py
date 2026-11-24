@@ -207,6 +207,16 @@ def body_lines_after_marker(lines: list[str], marker: str = "<") -> list[str]:
     body = lines[start_idx:]
     while body and not body[0].strip():
         body = body[1:]
+    if body and URL_RE.fullmatch(body[0].strip()):
+        body = body[1:]
+        while body and not body[0].strip():
+            body = body[1:]
+    while body and not body[-1].strip():
+        body = body[:-1]
+    while body and body[-1].strip() in {"<", ">"}:
+        body = body[:-1]
+        while body and not body[-1].strip():
+            body = body[:-1]
     return body
 
 
@@ -772,8 +782,9 @@ def run(args: argparse.Namespace) -> int:
 
     move_or_copy(normalized_input_path, target_docx, keep_original=args.keep_original)
 
-    lines = body_lines_after_marker(extract_docx_paragraphs(target_docx))
-    first_url = find_first_url_in_lines(lines)
+    paragraphs = extract_docx_paragraphs(target_docx)
+    first_url = find_first_url_in_lines(paragraphs)
+    lines = body_lines_after_marker(paragraphs)
     if not first_url:
         docx_urls = extract_docx_hyperlink_urls(target_docx)
         first_url = docx_urls[0] if docx_urls else ""

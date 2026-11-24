@@ -27,6 +27,24 @@ class SetupNewsPeopleTest(unittest.TestCase):
     def test_body_after_trailing_marker(self):
         self.assertEqual(setup_module.body_lines_after_marker(['Title', 'Introduction <', '', 'VO']), ['VO'])
 
+    def test_body_omits_source_url_and_trailing_boundary_without_open_marker(self):
+        lines = [
+            'https://www.daai.tv/news/abroad/601113',
+            '',
+            'News narration',
+            '',
+            '>',
+        ]
+
+        self.assertEqual(
+            setup_module.body_lines_after_marker(lines),
+            ['News narration'],
+        )
+        self.assertEqual(
+            setup_module.find_first_url_in_lines(lines),
+            'https://www.daai.tv/news/abroad/601113',
+        )
+
     def test_missing_source_url_warns_that_video_steps_are_skipped(self) -> None:
         error = io.StringIO()
 
