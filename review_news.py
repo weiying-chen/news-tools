@@ -419,7 +419,6 @@ public static class ReviewNewsNative {
         uint flags);
 }
 '@
-$title = $args[0]
 $window = [IntPtr]::Zero
 for ($attempt = 0; $attempt -lt 50; $attempt++) {
     $window = [ReviewNewsNative]::FindWindow($null, $title)
@@ -453,13 +452,13 @@ def build_windows_center_command(
     powershell: str,
     window_title: str,
 ) -> list[str]:
+    escaped_title = window_title.replace("'", "''")
     return [
         powershell,
         "-NoProfile",
         "-NonInteractive",
         "-Command",
-        WINDOWS_CENTER_SCRIPT,
-        window_title,
+        f"$title = '{escaped_title}'\n{WINDOWS_CENTER_SCRIPT}",
     ]
 
 
@@ -475,7 +474,6 @@ public static class ReviewNewsStopNative {
         IntPtr window, out uint processId);
 }
 '@
-$title = $args[0]
 $window = [ReviewNewsStopNative]::FindWindow($null, $title)
 if ($window -eq [IntPtr]::Zero) { exit 0 }
 $targetProcessId = [uint32]0
@@ -492,13 +490,13 @@ def build_windows_stop_command(
     powershell: str,
     window_title: str,
 ) -> list[str]:
+    escaped_title = window_title.replace("'", "''")
     return [
         powershell,
         "-NoProfile",
         "-NonInteractive",
         "-Command",
-        WINDOWS_STOP_SCRIPT,
-        window_title,
+        f"$title = '{escaped_title}'\n{WINDOWS_STOP_SCRIPT}",
     ]
 
 

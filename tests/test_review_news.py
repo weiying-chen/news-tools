@@ -241,8 +241,9 @@ class ReviewNewsTest(unittest.TestCase):
         self.assertEqual(command[:3], [
             'powershell.exe', '-NoProfile', '-NonInteractive',
         ])
-        self.assertEqual(command[-1], 'review-news-123')
         script = command[command.index('-Command') + 1]
+        self.assertIn("$title = 'review-news-123'", script)
+        self.assertNotIn('$args[0]', script)
         self.assertIn('FindWindow', script)
         self.assertIn('ShowWindow', script)
         self.assertIn('SetForegroundWindow', script)
@@ -261,8 +262,9 @@ class ReviewNewsTest(unittest.TestCase):
         self.assertEqual(command[:3], [
             'powershell.exe', '-NoProfile', '-NonInteractive',
         ])
-        self.assertEqual(command[-1], 'review-news-123')
         script = command[command.index('-Command') + 1]
+        self.assertIn("$title = 'review-news-123'", script)
+        self.assertNotIn('$args[0]', script)
         self.assertIn('FindWindow', script)
         self.assertIn('GetWindowThreadProcessId', script)
         self.assertIn('Stop-Process', script)
@@ -350,7 +352,8 @@ class ReviewNewsTest(unittest.TestCase):
         stop_command = run.call_args_list[1].args[0]
         stop_script = stop_command[stop_command.index('-Command') + 1]
         self.assertIn('GetWindowThreadProcessId', stop_script)
-        self.assertRegex(stop_command[-1], r'^review-news-\d+$')
+        self.assertRegex(stop_script, r"\$title = 'review-news-\d+'")
+        self.assertNotIn('$args[0]', stop_script)
         player.terminate.assert_called_once_with()
         self.assertEqual(player.wait.call_args_list, [mock.call(), mock.call(timeout=5)])
 
