@@ -555,6 +555,7 @@ def play_video(
         subprocess.run(command, check=True)
         return
 
+    taskkill = shutil.which("taskkill.exe")
     player = subprocess.Popen(command)
     try:
         subprocess.run(
@@ -569,16 +570,32 @@ def play_video(
         )
         return_code = player.wait()
     except KeyboardInterrupt:
-        subprocess.run(
-            build_windows_stop_command(
-                powershell=powershell,
-                window_title=window_title,
-            ),
-            check=False,
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
+        taskkill_result = None
+        if taskkill:
+            taskkill_result = subprocess.run(
+                [
+                    taskkill,
+                    "/FI",
+                    f"WINDOWTITLE eq {window_title}",
+                    "/T",
+                    "/F",
+                ],
+                check=False,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        if taskkill_result is None or taskkill_result.returncode != 0:
+            subprocess.run(
+                build_windows_stop_command(
+                    powershell=powershell,
+                    window_title=window_title,
+                ),
+                check=False,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
         player.terminate()
         try:
             player.wait(timeout=5)

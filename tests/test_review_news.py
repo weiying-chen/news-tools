@@ -289,13 +289,22 @@ class ReviewNewsTest(unittest.TestCase):
                     r'\\wsl.localhost\Ubuntu\cache\input.conf',
                 ],
             ),
-            mock.patch.object(review_module.shutil, 'which', return_value='powershell.exe'),
+            mock.patch.object(
+                review_module.shutil,
+                'which',
+                side_effect=lambda name: (
+                    'powershell.exe' if name == 'powershell.exe' else None
+                ),
+            ),
             mock.patch.object(
                 review_module.subprocess,
                 'Popen',
                 return_value=player,
             ) as popen,
-            mock.patch.object(review_module.subprocess, 'run') as run,
+            mock.patch.object(
+                review_module.subprocess,
+                'run',
+            ) as run,
         ):
             review_module.play_video(
                 mpv='mpv',
@@ -329,16 +338,79 @@ class ReviewNewsTest(unittest.TestCase):
         self.assertEqual(run.call_args.kwargs['stdout'], review_module.subprocess.DEVNULL)
         self.assertEqual(run.call_args.kwargs['stderr'], review_module.subprocess.DEVNULL)
 
-    def test_ctrl_c_terminates_the_wsl_player_it_launched(self) -> None:
+    def test_ctrl_c_taskkills_the_named_windows_player(self) -> None:
         player = mock.Mock()
         player.wait.side_effect = [KeyboardInterrupt, 0]
+        run_results = [
+            review_module.subprocess.CompletedProcess([], 0),
+            review_module.subprocess.CompletedProcess([], 0),
+        ]
         with (
             mock.patch.object(review_module, 'running_in_wsl', return_value=True),
             mock.patch.object(review_module, 'find_windows_mpv', return_value='mpv.exe'),
             mock.patch.object(review_module, 'to_windows_path', side_effect=lambda path: str(path)),
-            mock.patch.object(review_module.shutil, 'which', return_value='powershell.exe'),
+            mock.patch.object(
+                review_module.shutil,
+                'which',
+                side_effect=lambda name: name,
+            ),
             mock.patch.object(review_module.subprocess, 'Popen', return_value=player),
-            mock.patch.object(review_module.subprocess, 'run') as run,
+            mock.patch.object(
+                review_module.subprocess,
+                'run',
+                side_effect=run_results,
+            ) as run,
+        ):
+            with self.assertRaises(KeyboardInterrupt):
+                review_module.play_video(
+                    mpv='mpv',
+                    video=Path('/story/video.webm'),
+                    timeline=Path('/cache/english.m4a'),
+                    chapters=Path('/cache/chapters.ffmetadata'),
+                    input_config=Path('/cache/input.conf'),
+                )
+
+        self.assertEqual(
+            run.call_args_list[1].args[0],
+            [
+                'taskkill.exe',
+                '/FI',
+                mock.ANY,
+                '/T',
+                '/F',
+            ],
+        )
+        self.assertRegex(
+            run.call_args_list[1].args[0][2],
+            r'^WINDOWTITLE eq review-news-\d+$',
+        )
+        player.terminate.assert_called_once_with()
+        self.assertEqual(player.wait.call_args_list, [mock.call(), mock.call(timeout=5)])
+
+    def test_ctrl_c_uses_windows_stop_when_taskkill_is_unavailable(self) -> None:
+        player = mock.Mock()
+        player.wait.side_effect = [KeyboardInterrupt, 0]
+        run_results = [
+            review_module.subprocess.CompletedProcess([], 0),
+            review_module.subprocess.CompletedProcess([], 0),
+        ]
+        with (
+            mock.patch.object(review_module, 'running_in_wsl', return_value=True),
+            mock.patch.object(review_module, 'find_windows_mpv', return_value='mpv.exe'),
+            mock.patch.object(review_module, 'to_windows_path', side_effect=lambda path: str(path)),
+            mock.patch.object(
+                review_module.shutil,
+                'which',
+                side_effect=lambda name: (
+                    'powershell.exe' if name == 'powershell.exe' else None
+                ),
+            ),
+            mock.patch.object(review_module.subprocess, 'Popen', return_value=player),
+            mock.patch.object(
+                review_module.subprocess,
+                'run',
+                side_effect=run_results,
+            ) as run,
         ):
             with self.assertRaises(KeyboardInterrupt):
                 review_module.play_video(
