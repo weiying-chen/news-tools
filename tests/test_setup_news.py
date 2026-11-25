@@ -245,6 +245,10 @@ class SetupNewsPeopleTest(unittest.TestCase):
             fallback_command[fallback_command.index('--format') + 1],
             '18',
         )
+        self.assertIn('youtube:player_client=android_vr', fallback_command)
+        self.assertFalse(
+            any('youtubepot-bgutilscript' in argument for argument in fallback_command)
+        )
 
     def test_youtube_download_cleans_private_temp_directory_after_failure(self) -> None:
         failure = setup_module.subprocess.CalledProcessError(1, ['yt-dlp'])

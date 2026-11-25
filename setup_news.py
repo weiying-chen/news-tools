@@ -308,6 +308,8 @@ def build_youtube_download_command(
     format_selector: str | None = None,
     temp_directory: Path | None = None,
     cookies_path: Path | None = None,
+    player_clients: str = "mweb,tv,web_safari",
+    use_token_provider: bool = True,
 ) -> list[str]:
     token_script = (
         Path.home()
@@ -318,11 +320,17 @@ def build_youtube_download_command(
         "--no-playlist",
         "--js-runtimes",
         "node",
-        "--extractor-args",
-        f"youtubepot-bgutilscript:script_path={token_script}",
-        "--extractor-args",
-        "youtube:player_client=mweb,tv,web_safari",
     ]
+    if use_token_provider:
+        command.extend(
+            [
+                "--extractor-args",
+                f"youtubepot-bgutilscript:script_path={token_script}",
+            ]
+        )
+    command.extend(
+        ["--extractor-args", f"youtube:player_client={player_clients}"]
+    )
     if cookies_path is not None:
         command.extend(["--cookies", str(cookies_path)])
     if format_selector:
@@ -394,6 +402,8 @@ def download_youtube_video(youtube_url: str, workspace: Path) -> Path:
                         format_selector="18",
                         temp_directory=temp_directory,
                         cookies_path=cookies_path,
+                        player_clients="android_vr",
+                        use_token_provider=False,
                     ),
                     check=True,
                 )
